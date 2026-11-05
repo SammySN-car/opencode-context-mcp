@@ -94,14 +94,29 @@ def test_filter_diff_headers():
     assert "+new_call_step1()" in cleaned
 
 
-def test_generate_compact_diff_clean_file():
-    diff_output, is_error = generate_compact_diff(filepath="RESEARCH.md")
-    assert not is_error
-    assert "[OCCE: Working directory clean" in diff_output
+def test_generate_compact_diff_with_local_changes(tmp_path):
+    # Create a hermetic git repository in tmp_path
+    import subprocess
+    repo = str(tmp_path)
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "TestUser"], cwd=repo, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, capture_output=True, check=True)
 
+    test_file = tmp_path / "hello.py"
+    test_file.write_text("print('version 1')\n", encoding="utf-8")
+    subprocess.run(["git", "add", "hello.py"], cwd=repo, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=repo, capture_output=True, check=True)
 
-def test_generate_compact_diff_dirty_file():
-    diff_output, is_error = generate_compact_diff(filepath="occe/parsers/__init__.py")
-    assert not is_error
-    assert "diff --git" in diff_output
-    assert "+    \"generate_compact_diff\"" in diff_output
+    # Clean check
+    clean_diff, err = generate_compact_diff(cwd=repo)
+    assert not err
+    assert "[OCCE: Working directory clean" in clean_diff
+
+    # Modify file
+    test_file.write_text("print('version 2 - modified')\n", encoding="utf-8")
+
+    # Dirty check
+    dirty_diff, err = generate_compact_diff(cwd=repo)
+    assert not err
+    assert "--- a/hello.py" in dirty_diff
+    assert "+print('version 2 - modified')" in dirty_diff
