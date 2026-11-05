@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context-optimizer": {
+      "command": "python",
+      "args": ["-m", "occe.server"]
+    }
+  },
+  // Optional: Restrict built-in tools to guide model toward OCCE precision tools
+  "permission": {
+    "read": "deny",      // Forces model to use code_skeleton / symbol_slice
+    "bash": "ask"        // Guides model to prefer smart_exec / test_compress
+  }
+}

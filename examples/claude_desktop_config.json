@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "context-optimizer": {
+      "command": "python",
+      "args": ["-m", "occe.server"]
+    }
+  }
+}
