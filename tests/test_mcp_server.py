@@ -188,6 +188,87 @@ def test_mcp_client_notifications_ignored_cleanly(server):
     assert server.handle_message(req_progress) is None
 
 
+def test_mcp_call_test_compress(server):
+    req = {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {
+            "name": "test_compress",
+            "arguments": {"command": "python -c \"print('================ 5 passed in 0.20s ================')\""}
+        }
+    }
+    resp = server.handle_message(req)
+    assert not resp["result"]["isError"]
+    assert "ALL 5 TESTS PASSED" in resp["result"]["content"][0]["text"]
+
+
+def test_mcp_call_diff_compact(server):
+    req = {
+        "jsonrpc": "2.0",
+        "id": 12,
+        "method": "tools/call",
+        "params": {
+            "name": "diff_compact",
+            "arguments": {"staged": False}
+        }
+    }
+    resp = server.handle_message(req)
+    assert not resp["result"]["isError"]
+    assert "OCCE" in resp["result"]["content"][0]["text"]
+
+
+def test_mcp_call_error_validation_branches(server):
+    # Missing path in code_skeleton
+    resp = server.handle_message({"jsonrpc": "2.0", "id": 13, "method": "tools/call", "params": {"name": "code_skeleton", "arguments": {}}})
+    assert resp["result"]["isError"]
+
+    # Nonexistent path
+    resp = server.handle_message({"jsonrpc": "2.0", "id": 14, "method": "tools/call", "params": {"name": "code_skeleton", "arguments": {"path": "invalid_p.py"}}})
+    assert resp["result"]["isError"]
+
+    # Missing command in smart_exec
+    resp = server.handle_message({"jsonrpc": "2.0", "id": 15, "method": "tools/call", "params": {"name": "smart_exec", "arguments": {}}})
+    assert resp["result"]["isError"]
+
+    # Missing command in test_compress
+    resp = server.handle_message({"jsonrpc": "2.0", "id": 16, "method": "tools/call", "params": {"name": "test_compress", "arguments": {}}})
+    assert resp["result"]["isError"]
+
+
+def test_mcp_yellow_and_red_zone_alerts(server):
+    # Simulate yellow zone
+    server.ledger.session_tokens_sent = 30_000
+    resp_yellow = server.execute_tool("token_ledger", {})
+    assert "YELLOW ZONE" in resp_yellow["content"][0]["text"]
+
+    # Simulate red zone
+    server.ledger.session_tokens_sent = 50_000
+    resp_red = server.execute_tool("token_ledger", {})
+    assert "RED ZONE" in resp_red["content"][0]["text"]
+
+
+def test_mcp_stdio_loop_execution(server, monkeypatch):
+    import io
+    import sys
+
+    # Feed initialize followed by EOF
+    mock_input = io.StringIO(
+        json.dumps({"jsonrpc": "2.0", "id": 99, "method": "ping"}) + "\n"
+    )
+    mock_output = io.StringIO()
+
+    monkeypatch.setattr(sys, "stdin", mock_input)
+    monkeypatch.setattr(sys, "stdout", mock_output)
+
+    server.run_stdio_loop()
+
+    out = mock_output.getvalue().strip()
+    resp = json.loads(out)
+    assert resp["id"] == 99
+    assert resp["result"] == {}
+
+
 def test_mcp_unknown_method(server):
     req = {
         "jsonrpc": "2.0",

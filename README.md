@@ -1,6 +1,7 @@
 # OpenCode Context Optimizer (OCCE)
 
-[![Tests](https://img.shields.io/badge/tests-49%20passed-success)](tests/)
+[![Tests](https://img.shields.io/badge/tests-56%20passed-success)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
 [![Protocol](https://img.shields.io/badge/MCP-2024--11--05-orange)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)

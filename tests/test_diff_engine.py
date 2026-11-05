@@ -120,3 +120,12 @@ def test_generate_compact_diff_with_local_changes(tmp_path):
     assert not err
     assert "--- a/hello.py" in dirty_diff
     assert "+print('version 2 - modified')" in dirty_diff
+
+
+def test_generate_compact_diff_non_git_repo(tmp_path):
+    import os
+    non_git_dir = str(tmp_path / "empty_dir")
+    os.makedirs(non_git_dir, exist_ok=True)
+    out, is_err = generate_compact_diff(cwd=non_git_dir)
+    assert is_err
+    assert "not a git repository" in out.lower()

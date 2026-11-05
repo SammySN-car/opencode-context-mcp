@@ -178,6 +178,13 @@ def test_compress_jest_with_failure():
     assert "Expected: 401" in result
 
 
+def test_run_test_suite_wrapper():
+    from occe.parsers.test_reducers import run_test_suite
+    report, is_err = run_test_suite("python -c \"print('=== 10 passed in 0.50s ===')\"")
+    assert not is_err
+    assert "ALL 10 TESTS PASSED" in report
+
+
 def test_compress_test_output_auto_detection():
     # Pytest auto-detect
     pytest_raw = "42 passed in 1.25s"
