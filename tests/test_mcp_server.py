@@ -144,6 +144,50 @@ def test_mcp_call_token_ledger(server):
     assert "Attention Health" in text
 
 
+def test_mcp_call_symbol_slice_missing_symbol_shows_available(server, tmp_path):
+    py_file = tmp_path / "sample.py"
+    py_file.write_text(
+        "class OrderService:\n"
+        "    pass\n"
+        "def create_order(): pass\n"
+        "def cancel_order(): pass\n",
+        encoding="utf-8"
+    )
+
+    req = {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {
+            "name": "symbol_slice",
+            "arguments": {"path": str(py_file), "symbol": "non_existent_fn"}
+        }
+    }
+    resp = server.handle_message(req)
+    assert resp["result"]["isError"]
+    err_text = resp["result"]["content"][0]["text"]
+    assert "Symbol 'non_existent_fn' not found" in err_text
+    assert "Available symbols:" in err_text
+    assert "OrderService" in err_text
+    assert "create_order" in err_text
+
+
+def test_mcp_client_notifications_ignored_cleanly(server):
+    req_cancelled = {
+        "jsonrpc": "2.0",
+        "method": "notifications/cancelled",
+        "params": {"requestId": 42}
+    }
+    assert server.handle_message(req_cancelled) is None
+
+    req_progress = {
+        "jsonrpc": "2.0",
+        "method": "notifications/progress",
+        "params": {"progress": 50}
+    }
+    assert server.handle_message(req_progress) is None
+
+
 def test_mcp_unknown_method(server):
     req = {
         "jsonrpc": "2.0",

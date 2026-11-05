@@ -57,6 +57,23 @@ def test_filter_package_manager_noise():
     assert "Build completed successfully in 3.42s" in filtered
 
 
+def test_strip_osc_hyperlinks_and_titles():
+    osc_stream = "\x1b]0;Running Build Tasks\x07Starting compilation...\x1b]8;;http://example.com\x1b\\Docs\x1b]8;;\x1b\\"
+    cleaned = strip_ansi(osc_stream)
+    assert "\x1b" not in cleaned
+    assert "Running Build Tasks" not in cleaned
+    assert "Starting compilation..." in cleaned
+    assert "Docs" in cleaned
+
+
+def test_collapse_carriage_returns_with_windows_crlf():
+    windows_crlf = "Step 1: Downloading 25%\rStep 1: Downloading 100%\r\nStep 2: Complete\r\n"
+    collapsed = collapse_carriage_returns(windows_crlf)
+    assert "Step 1: Downloading 25%" not in collapsed
+    assert "Step 1: Downloading 100%" in collapsed
+    assert "Step 2: Complete" in collapsed
+
+
 def test_truncate_head_tail():
     long_log = "\n".join(f"Log line {i}: processing item {i*7}" for i in range(120))
     truncated = truncate_head_tail(long_log, max_lines=40)

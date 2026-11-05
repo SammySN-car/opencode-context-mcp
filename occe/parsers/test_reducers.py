@@ -2,7 +2,7 @@
 
 Parses test outputs for Pytest, Cargo test, Go test, and Jest/Vitest.
 Collapses 100% passing suites into a single status line, while isolating
-exact failure tracebacks, assertion messages, and line numbers when tests fail.
+exact failure tracebacks, assertion messages, collection errors, and line numbers.
 """
 
 from __future__ import annotations
@@ -11,23 +11,37 @@ import re
 import subprocess
 from typing import Optional, Tuple
 
-from occe.parsers.noise_gate import strip_ansi, sanitize_terminal_output, truncate_head_tail
+from occe.parsers.noise_gate import strip_ansi, sanitize_terminal_output
 
 
 def compress_pytest_output(raw_output: str) -> str:
-    """Compress Pytest output by collapsing passes and isolating failures."""
+    """Compress Pytest output by collapsing passes and isolating failures/errors."""
     clean = strip_ansi(raw_output)
 
     pass_match = re.search(r'(?:=+\s*)?(\d+)\s+passed[^\n]*in\s+([\d\.]+)s(?:\s*=+)?', clean)
     fail_match = re.search(r'(?:=+\s*)?(\d+)\s+failed(?:,\s*(\d+)\s+passed)?[^\n]*in\s+([\d\.]+)s(?:\s*=+)?', clean)
+    error_match = re.search(r'(?:=+\s*)?(\d+)\s+error[s]?[^\n]*(?:in\s+([\d\.]+)s)?(?:\s*=+)?', clean)
 
-    # 1. Complete success
-    if pass_match and not fail_match:
+    # 1. Complete success without failures or errors
+    if pass_match and not fail_match and not error_match:
         return f"[OCCE Pytest: ALL {pass_match.group(1)} TESTS PASSED in {pass_match.group(2)}s]"
 
-    # 2. Failures present
+    # 2. Collection or runtime ERRORS present (e.g., import errors or broken syntax)
+    if "==================================== ERRORS ====================================" in clean or "=== ERRORS ===" in clean:
+        parts = re.split(r'=+\s*ERRORS\s*=+', clean)
+        if len(parts) > 1:
+            err_body = parts[1]
+            if "=== short test summary info ===" in err_body:
+                err_body = err_body.split("=== short test summary info ===")[0]
+            elif "====" in err_body:
+                idx = err_body.rfind("====")
+                if idx != -1:
+                    err_body = err_body[:idx]
+            return f"[OCCE Pytest Collection/Runtime Error]\n\n{err_body.strip()}"
+
+    # 3. Test assertion FAILURES present
     if "FAILURES" in clean:
-        parts = clean.split("=========================== FAILURES ===========================")
+        parts = re.split(r'=+\s*FAILURES\s*=+', clean)
         if len(parts) > 1:
             failure_body = parts[1]
             if "=== short test summary info ===" in failure_body:
@@ -40,7 +54,7 @@ def compress_pytest_output(raw_output: str) -> str:
             summary_line = fail_match.group(0).strip("= ") if fail_match else "Test suite failed"
             return f"[OCCE Pytest Report: {summary_line}]\n\n{failure_body.strip()}"
 
-    # 3. Fallback to general truncation
+    # 4. Fallback to general truncation
     return sanitize_terminal_output(clean, max_lines=45)
 
 
@@ -53,7 +67,7 @@ def compress_cargo_test(raw_output: str) -> str:
     if ok_match:
         return f"[OCCE Cargo Test: ALL {ok_match.group(1)} TESTS PASSED]"
 
-    # Extract failed tests
+    # Extract failed test symbols
     failed_tests = re.findall(r'^test\s+([\w::]+)\s+\.\.\.\s+FAILED', clean, re.MULTILINE)
 
     if "failures:" in clean:
@@ -114,7 +128,11 @@ def compress_jest_output(raw_output: str) -> str:
 
     # Check for all passed: Tests: 42 passed, 42 total
     pass_match = re.search(r'Tests:\s+(\d+)\s+passed,\s+\1\s+total', clean)
-    if pass_match and "FAIL " not in clean:
+    if not pass_match:
+        # Vitest format: Tests  10 passed (10)
+        pass_match = re.search(r'Tests\s+(\d+)\s+passed\s+\(\1\)', clean)
+
+    if pass_match and "FAIL " not in clean and "FAIL" not in clean.splitlines()[-3:]:
         return f"[OCCE Jest/Vitest: ALL {pass_match.group(1)} TESTS PASSED]"
 
     lines = clean.splitlines()
@@ -122,9 +140,9 @@ def compress_jest_output(raw_output: str) -> str:
     capture = False
 
     for line in lines:
-        if line.startswith("FAIL ") or "● " in line:
+        if line.startswith("FAIL ") or "● " in line or line.strip().startswith("Error:"):
             capture = True
-        elif line.startswith("Test Suites:") or line.startswith("Tests:"):
+        elif line.startswith("Test Suites:") or line.startswith("Tests:") or line.startswith("Test Files"):
             isolated_lines.append(line)
             capture = False
 
@@ -133,7 +151,7 @@ def compress_jest_output(raw_output: str) -> str:
                 isolated_lines.append(line)
 
     if isolated_lines:
-        return "[OCCE Jest Test Report]\n\n" + "\n".join(isolated_lines[:50])
+        return "[OCCE Jest/Vitest Test Report]\n\n" + "\n".join(isolated_lines[:50])
 
     return sanitize_terminal_output(clean, max_lines=45)
 
@@ -160,7 +178,7 @@ def run_test_suite(
     cwd: Optional[str] = None,
     timeout: float = 120.0
 ) -> Tuple[str, bool]:
-    """Execute a test command and return its compressed, saliency-filtered report.
+    """Execute a test command with strict UTF-8 decoding and noise-gate compression.
 
     Returns:
         (compressed_report, is_error)
@@ -171,6 +189,8 @@ def run_test_suite(
             shell=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=cwd,
             timeout=timeout
         )

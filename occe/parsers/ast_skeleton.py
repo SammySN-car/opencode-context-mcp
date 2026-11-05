@@ -2,14 +2,14 @@
 
 Extracts concise structural outlines from source code by replacing implementation
 bodies with Ellipsis (...), preserving class hierarchies, function signatures,
-type annotations, and docstrings.
+type annotations, constants, and docstrings.
 """
 
 from __future__ import annotations
 
 import ast
 import re
-from typing import Optional
+from typing import Optional, List
 
 
 class SkeletonTransformer(ast.NodeTransformer):
@@ -67,9 +67,9 @@ class SkeletonTransformer(ast.NodeTransformer):
                 # Preserve typed class-level attributes: name: str = ...
                 new_body.append(item)
             elif isinstance(item, ast.Assign):
-                # Preserve simple constant assignments like __all__ or UPPERCASE constants
+                # Preserve simple assignments, uppercase constants, or __all__
                 for target in item.targets:
-                    if isinstance(target, ast.Name) and (target.id.isupper() or target.id == "__all__"):
+                    if isinstance(target, ast.Name) and (target.id.isupper() or target.id == "__all__" or target.id.startswith("_")):
                         new_body.append(item)
                         break
 
@@ -83,7 +83,6 @@ class SkeletonTransformer(ast.NodeTransformer):
     def visit_Module(self, node: ast.Module) -> ast.Module:
         new_body: list[ast.stmt] = []
 
-        # Preserve module-level docstring if available
         if self.preserve_docstring:
             doc = ast.get_docstring(node, clean=True)
             if doc:
@@ -109,24 +108,47 @@ class SkeletonTransformer(ast.NodeTransformer):
 
 
 def _fallback_heuristic_skeleton(source_code: str) -> str:
-    """Regex-based fallback for syntax errors or non-Python languages."""
+    """Multi-language regex skeleton extractor for TypeScript, JavaScript, Go, Rust, and Java."""
+    lines = source_code.splitlines()
+    skeleton_lines: list[str] = []
+
     sig_re = re.compile(
         r'^\s*(?:'
-        r'(?:async\s+)?def\s+[\w_]+|'
-        r'class\s+[\w_]+|'
+        r'export\s+(?:default\s+)?(?:class|interface|type|function|enum)\s+[\w_]+|'
+        r'(?:public|private|protected|static|readonly|async)*\s*(?:class|interface|enum)\s+[\w_]+|'
+        r'(?:public|private|protected|static|async)*\s*[\w_]+\s*\([^)]*\)\s*[:\w<>[\]\s]*\{?|'
+        r'(?:const|let|var)\s+[\w_]+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>|'
+        r'type\s+[\w_]+\s*=|'
         r'(?:pub\s+)?(?:async\s+)?fn\s+[\w_]+|'
+        r'(?:pub\s+)?struct\s+[\w_]+|'
+        r'(?:pub\s+)?trait\s+[\w_]+|'
+        r'(?:pub\s+)?enum\s+[\w_]+|'
+        r'impl(?:<[^>]+>)?\s+[\w_]+|'
         r'func\s+(?:\([^)]+\)\s+)?[\w_]+|'
-        r'export\s+(?:default\s+)?(?:class|function|interface|type)\s+[\w_]+|'
-        r'(?:const|let|var)\s+[\w_]+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>'
-        r')[^{:\n]*[:{]?',
-        re.MULTILINE
+        r'type\s+[\w_]+\s+(?:struct|interface)|'
+        r'(?:async\s+)?def\s+[\w_]+|'
+        r'class\s+[\w_]+'
+        r')',
+        re.IGNORECASE
     )
-    matches = sig_re.findall(source_code)
-    if matches:
-        return "\n".join(m.strip() + " ..." for m in matches)
-    # If no signatures found, return first 20 lines
-    lines = source_code.splitlines()[:20]
-    return "\n".join(lines) + ("\n..." if len(source_code.splitlines()) > 20 else "")
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//") or stripped.startswith("#"):
+            continue
+
+        if sig_re.match(line):
+            clean_sig = stripped.rstrip("{:").strip()
+            # Retain leading indentation for structure
+            indent = len(line) - len(line.lstrip())
+            skeleton_lines.append(" " * indent + clean_sig + " { ... }")
+
+    if skeleton_lines:
+        return "\n".join(skeleton_lines)
+
+    # If no structural signatures found, return first 25 lines
+    head = lines[:25]
+    return "\n".join(head) + ("\n[... remaining content omitted ...]" if len(lines) > 25 else "")
 
 
 def generate_python_skeleton(
@@ -138,7 +160,11 @@ def generate_python_skeleton(
 
     Replaces all implementation bodies with Ellipsis (...) while preserving
     imports, class structures, method signatures, argument types, and docstrings.
+    Falls back to language-aware heuristic parsing for non-Python or syntax-error files.
     """
+    if not source_code or not source_code.strip():
+        return ""
+
     try:
         tree = ast.parse(source_code)
         transformer = SkeletonTransformer(max_depth=max_depth, preserve_docstring=preserve_docstring)
@@ -150,43 +176,76 @@ def generate_python_skeleton(
 
 
 def extract_symbol(source_code: str, symbol_name: str) -> Optional[str]:
-    """Extract the exact full definition of a symbol (class, function, or method).
+    """Extract the exact full definition of a symbol (class, function, method, or constant).
 
-    Supports qualified names like 'ClassName.method_name' or standalone names
-    like 'method_name' or 'ClassName'.
+    Supports:
+    - Qualified names: 'ClassName.method_name' or 'ClassName.ATTRIBUTE'
+    - Standalone names: 'method_name', 'ClassName', 'CONSTANT_NAME'
+    - Property getters and setters: extracts all definitions matching the name
     """
+    if not source_code or not symbol_name:
+        return None
+
     try:
         tree = ast.parse(source_code)
     except SyntaxError:
         return None
 
     target_class: Optional[str] = None
-    target_member: str = symbol_name
+    target_member: str = symbol_name.strip()
 
     if "." in symbol_name:
         parts = symbol_name.split(".", 1)
-        target_class = parts[0]
-        target_member = parts[1]
+        target_class = parts[0].strip()
+        target_member = parts[1].strip()
+
+    matches: List[str] = []
 
     for node in tree.body:
         # 1. Matching top-level functions
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if target_class is None and node.name == target_member:
-                return ast.unparse(node)
+                matches.append(ast.unparse(node))
 
         # 2. Matching classes
         elif isinstance(node, ast.ClassDef):
             if target_class is None and node.name == target_member:
-                return ast.unparse(node)
+                matches.append(ast.unparse(node))
 
             if target_class is None or node.name == target_class:
-                # Search within class methods
+                class_matches: List[str] = []
                 for member in node.body:
                     if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         if member.name == target_member:
-                            # Return the member with enclosing class context
-                            member_code = ast.unparse(member)
-                            indented_member = "\n".join("    " + line for line in member_code.splitlines())
-                            return f"class {node.name}:\n    # ... enclosing class context ...\n{indented_member}"
+                            class_matches.append(ast.unparse(member))
+                    elif isinstance(member, ast.AnnAssign):
+                        if isinstance(member.target, ast.Name) and member.target.id == target_member:
+                            class_matches.append(ast.unparse(member))
+                    elif isinstance(member, ast.Assign):
+                        for tgt in member.targets:
+                            if isinstance(tgt, ast.Name) and tgt.id == target_member:
+                                class_matches.append(ast.unparse(member))
+                                break
+
+                if class_matches:
+                    indented = "\n\n".join(
+                        "\n".join("    " + line for line in cm.splitlines())
+                        for cm in class_matches
+                    )
+                    matches.append(f"class {node.name}:\n    # ... enclosing class context ...\n{indented}")
+
+        # 3. Matching top-level variable/constant assignments
+        elif target_class is None:
+            if isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name) and node.target.id == target_member:
+                    matches.append(ast.unparse(node))
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == target_member:
+                        matches.append(ast.unparse(node))
+                        break
+
+    if matches:
+        return "\n\n".join(matches)
 
     return None

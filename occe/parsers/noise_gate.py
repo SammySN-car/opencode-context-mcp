@@ -1,7 +1,8 @@
 """Terminal noise-gate and stream sanitization engine.
 
-Strips ANSI escape sequences, normalizes carriage returns, suppresses package
-manager progress bars, and applies saliency-preserving head/tail truncation.
+Strips ANSI escape sequences (CSI, OSC, standard ESC), normalizes carriage returns,
+suppresses package manager progress bars and spinners, and applies
+saliency-preserving head/tail truncation.
 """
 
 from __future__ import annotations
@@ -10,9 +11,14 @@ import re
 import subprocess
 from typing import Optional, Tuple
 
-# Comprehensive regex matching ANSI escape sequences (CSI, OSC, standard ESC codes)
+# Comprehensive regex matching ANSI escape sequences (CSI, standard ESC codes)
 ANSI_ESCAPE_RE = re.compile(
     r'(?:\x1B[@-Z\\-_]|[\x80-\x9A\x9C-\x9F]|(?:\x1B\[|\x9B)[0-?]*[ -/]*[@-~])'
+)
+
+# OSC (Operating System Command) sequences, e.g. terminal titles, hyperlinks: \x1b]0;Title\x07
+OSC_ESCAPE_RE = re.compile(
+    r'\x1B\][0-9]+;[^\x07\x1B]*?(?:\x07|\x1B\\)'
 )
 
 # Regex matching dynamic progress bars, spinners, and package manager download streams
@@ -33,31 +39,45 @@ PACKAGE_NOISE_RE = re.compile(
 
 
 def strip_ansi(text: str) -> str:
-    """Remove all ANSI color codes and terminal control sequences."""
-    return ANSI_ESCAPE_RE.sub("", text)
+    """Remove all ANSI color codes, OSC sequences, and terminal control characters."""
+    if not text:
+        return ""
+    # Strip OSC sequences first (titles, links)
+    no_osc = OSC_ESCAPE_RE.sub("", text)
+    # Strip CSI and standard ANSI control sequences
+    return ANSI_ESCAPE_RE.sub("", no_osc)
 
 
 def collapse_carriage_returns(text: str) -> str:
     """Resolve in-place line overwrites caused by \\r (carriage return).
 
-    When a progress counter or spinner emits 'Step 1\\rStep 2\\rDone',
-    this resolves each line to its final displayed state.
+    Normalizes Windows \\r\\n to \\n first, then resolves any remaining in-place
+    overwrites (e.g. '10%\\r20%\\rDone') to their final displayed state.
     """
-    lines = text.split("\n")
+    if not text:
+        return ""
+
+    # Normalize Windows CRLF first so trailing \r does not confuse overwrite logic
+    normalized = text.replace("\r\n", "\n")
+    lines = normalized.split("\n")
     resolved_lines = []
+
     for line in lines:
         if "\r" in line:
             parts = [p for p in line.split("\r") if p.strip()]
             resolved_lines.append(parts[-1] if parts else "")
         else:
             resolved_lines.append(line)
+
     return "\n".join(resolved_lines)
 
 
 def filter_package_noise(text: str) -> str:
     """Filter out progress bars, spinner frames, and intermediate build spam."""
+    if not text:
+        return ""
     filtered = PACKAGE_NOISE_RE.sub("", text)
-    # Remove multiple consecutive blank lines left by filtered output
+    # Remove excessive blank lines left behind by stripped lines
     filtered = re.sub(r'\n{3,}', '\n\n', filtered)
     return filtered.strip()
 
@@ -65,9 +85,12 @@ def filter_package_noise(text: str) -> str:
 def truncate_head_tail(text: str, max_lines: int = 60, head_ratio: float = 0.3) -> str:
     """Perform saliency-preserving head/tail truncation on large outputs.
 
-    Preserves the top lines (command invocation, flags, setup) and bottom lines
+    Preserves top lines (command invocation, flags, setup) and bottom lines
     (final summary, return status, or stack traces) while omitting the middle spam.
     """
+    if not text:
+        return ""
+
     lines = text.splitlines()
     if len(lines) <= max_lines:
         return text
@@ -89,7 +112,7 @@ def truncate_head_tail(text: str, max_lines: int = 60, head_ratio: float = 0.3) 
 def sanitize_terminal_output(raw_text: str, max_lines: int = 60) -> str:
     """Execute the full 4-stage noise-gate sanitization pipeline.
 
-    1. Strip ANSI escape sequences
+    1. Normalize line endings and strip ANSI/OSC escape sequences
     2. Normalize in-place carriage returns
     3. Filter progress bars and spinners
     4. Saliency-preserving head/tail truncation
@@ -110,7 +133,7 @@ def execute_shell_command(
     cwd: Optional[str] = None,
     timeout: float = 60.0
 ) -> Tuple[str, bool]:
-    """Execute a shell command and pass its combined output through the noise gate.
+    """Execute a shell command with strict UTF-8 decoding and noise-gate filtering.
 
     Returns:
         (sanitized_output, is_error)
@@ -121,6 +144,8 @@ def execute_shell_command(
             shell=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=cwd,
             timeout=timeout
         )

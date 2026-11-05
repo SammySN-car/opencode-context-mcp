@@ -6,11 +6,12 @@ enforcing strict protocol framing, stderr logging isolation, and session state t
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import os
 import sys
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from occe.protocol import PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION, TOOL_DEFINITIONS
 from occe.parsers.ast_skeleton import generate_python_skeleton, extract_symbol
@@ -29,6 +30,25 @@ logging.basicConfig(
 logger = logging.getLogger("occe.server")
 
 
+def _list_available_symbols(source_code: str) -> List[str]:
+    """Helper to list top-level symbols in a Python file for agent self-healing."""
+    try:
+        tree = ast.parse(source_code)
+        symbols: List[str] = []
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                symbols.append(node.name)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                symbols.append(node.target.id)
+            elif isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        symbols.append(t.id)
+        return symbols[:15]
+    except Exception:
+        return []
+
+
 class MCPServer:
     """Zero-dependency Model Context Protocol server communicating via stdio."""
 
@@ -39,9 +59,10 @@ class MCPServer:
 
     def _format_tool_response(self, text: str, is_error: bool = False) -> Dict[str, Any]:
         """Wrap output in standard MCP tools/call content structure."""
-        # Append degradation alert if in Yellow or Red zones
         zone = self.ledger.current_zone
         final_text = text
+
+        # Non-intrusive budget guidance appended when context crosses thresholds
         if zone == AttentionZone.YELLOW:
             final_text += (
                 f"\n\n[OCCE Notice: Session context in YELLOW ZONE (~{self.ledger.total_context_tokens:,} tokens). "
@@ -67,11 +88,15 @@ class MCPServer:
         """Execute one of the registered OCCE tools."""
         try:
             if name == "code_skeleton":
-                path = arguments.get("path")
-                if not path or not os.path.exists(path):
-                    return self._format_tool_response(f"[OCCE Error: File '{path}' not found]", is_error=True)
+                raw_path = str(arguments.get("path", "")).strip().strip("'\"")
+                if not raw_path:
+                    return self._format_tool_response("[OCCE Error: Parameter 'path' is required]", is_error=True)
 
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                if not os.path.exists(raw_path):
+                    abs_p = os.path.abspath(raw_path)
+                    return self._format_tool_response(f"[OCCE Error: File '{raw_path}' not found at '{abs_p}']", is_error=True)
+
+                with open(raw_path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
 
                 depth = arguments.get("depth", 3)
@@ -81,33 +106,43 @@ class MCPServer:
                 opt_tok = estimate_tokens(skeleton)
                 self.ledger.record_savings("code_skeleton", raw_tok, opt_tok)
                 self.ledger.record_turn(input_tokens=opt_tok)
-                self.tombstones.record_read(turn=self.ledger.turn_count, filepath=path, token_count=opt_tok)
+                self.tombstones.record_read(turn=self.ledger.turn_count, filepath=raw_path, token_count=opt_tok)
 
                 reduction = ((raw_tok - opt_tok) / raw_tok) * 100 if raw_tok > 0 else 0
-                header = f"# [OCCE AST Skeleton: {os.path.basename(path)} | ~{raw_tok} -> ~{opt_tok} tokens ({reduction:.1f}% saved)]\n"
+                header = f"# [OCCE AST Skeleton: {os.path.basename(raw_path)} | ~{raw_tok} -> ~{opt_tok} tokens ({reduction:.1f}% saved)]\n"
                 return self._format_tool_response(header + skeleton)
 
             elif name == "symbol_slice":
-                path = arguments.get("path")
-                symbol = arguments.get("symbol")
-                if not path or not os.path.exists(path):
-                    return self._format_tool_response(f"[OCCE Error: File '{path}' not found]", is_error=True)
+                raw_path = str(arguments.get("path", "")).strip().strip("'\"")
+                symbol = str(arguments.get("symbol", "")).strip()
+
+                if not raw_path:
+                    return self._format_tool_response("[OCCE Error: Parameter 'path' is required]", is_error=True)
                 if not symbol:
                     return self._format_tool_response("[OCCE Error: Parameter 'symbol' is required]", is_error=True)
 
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                if not os.path.exists(raw_path):
+                    abs_p = os.path.abspath(raw_path)
+                    return self._format_tool_response(f"[OCCE Error: File '{raw_path}' not found at '{abs_p}']", is_error=True)
+
+                with open(raw_path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
 
                 slice_code = extract_symbol(content, symbol)
                 if slice_code is None:
-                    return self._format_tool_response(f"[OCCE Error: Symbol '{symbol}' not found in '{path}']", is_error=True)
+                    avail = _list_available_symbols(content)
+                    avail_str = f" Available symbols: {', '.join(avail)}" if avail else ""
+                    return self._format_tool_response(
+                        f"[OCCE Error: Symbol '{symbol}' not found in '{raw_path}'.{avail_str}]",
+                        is_error=True
+                    )
 
                 raw_tok = estimate_tokens(content)
                 opt_tok = estimate_tokens(slice_code)
                 self.ledger.record_savings("symbol_slice", raw_tok, opt_tok)
                 self.ledger.record_turn(input_tokens=opt_tok)
 
-                header = f"# [OCCE Symbol Slice: '{symbol}' in {os.path.basename(path)} | ~{opt_tok} tokens]\n"
+                header = f"# [OCCE Symbol Slice: '{symbol}' in {os.path.basename(raw_path)} | ~{opt_tok} tokens]\n"
                 return self._format_tool_response(header + slice_code)
 
             elif name == "smart_exec":
@@ -160,8 +195,8 @@ class MCPServer:
             return self._format_tool_response(f"[OCCE Unexpected Error: {str(e)}]", is_error=True)
 
     def handle_message(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Process a single incoming JSON-RPC request/notification."""
-        method = request.get("method")
+        """Process a single incoming JSON-RPC request or notification."""
+        method = request.get("method", "")
         msg_id = request.get("id")
 
         logger.debug("Received method: %s, id: %s", method, msg_id)
@@ -183,12 +218,12 @@ class MCPServer:
                 }
             }
 
-        # 2. Initialized notification
-        elif method == "notifications/initialized":
-            logger.info("Client handshake successfully completed.")
+        # 2. Client notifications (must never return a response)
+        elif method.startswith("notifications/"):
+            logger.debug("Handled client notification: %s", method)
             return None
 
-        # 3. List tools
+        # 3. List available tools
         elif method == "tools/list":
             return {
                 "jsonrpc": "2.0",
@@ -198,7 +233,7 @@ class MCPServer:
                 }
             }
 
-        # 4. Call tool
+        # 4. Call a tool
         elif method == "tools/call":
             params = request.get("params", {})
             tool_name = params.get("name", "")
@@ -218,7 +253,7 @@ class MCPServer:
                 "result": {}
             }
 
-        # Unknown method
+        # 6. Unknown method
         else:
             if msg_id is not None:
                 return {

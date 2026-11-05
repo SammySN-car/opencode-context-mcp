@@ -144,6 +144,47 @@ def test_extract_nonexistent_symbol():
     assert code is None
 
 
+def test_extract_symbol_constant_assignment():
+    code = extract_symbol(SAMPLE_PYTHON_FILE, "MAX_RETRIES")
+    assert code is not None
+    assert "MAX_RETRIES = 5" in code
+
+
+def test_extract_symbol_class_attribute():
+    code = extract_symbol(SAMPLE_PYTHON_FILE, "PaymentGateway.SANDBOX_URL")
+    assert code is not None
+    assert "class PaymentGateway:" in code
+    assert "SANDBOX_URL: str = 'https://sandbox.payment.io'" in code or "SANDBOX_URL" in code
+
+
+def test_fallback_typescript_skeleton():
+    ts_code = """
+    export interface UserProfile {
+        id: string;
+        email: string;
+    }
+
+    export class AuthService {
+        private secret: string;
+
+        constructor(secret: string) {
+            this.secret = secret;
+            console.log("Setting up auth...");
+        }
+
+        async login(user: string, pass: string): Promise<boolean> {
+            // 40 lines of hashing and JWT signing
+            return true;
+        }
+    }
+    """
+    skeleton = generate_python_skeleton(ts_code)
+    assert "interface UserProfile" in skeleton
+    assert "class AuthService" in skeleton
+    assert "async login(user: string, pass: string): Promise<boolean>" in skeleton
+    assert 'console.log("Setting up auth...")' not in skeleton
+
+
 def test_fallback_heuristic_on_syntax_error():
     broken_code = """
     def valid_func(a: int) -> int:

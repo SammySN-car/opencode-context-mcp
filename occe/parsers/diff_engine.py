@@ -7,13 +7,15 @@ file mode boilerplate, and index hashes, reducing diff token consumption by 75-8
 from __future__ import annotations
 
 import difflib
-import re
 import subprocess
 from typing import Optional, Tuple
 
 
 def filter_diff_headers(raw_diff: str) -> str:
     """Filter out git index hashes, binary indicators, and file permission metadata."""
+    if not raw_diff:
+        return ""
+
     lines = raw_diff.splitlines()
     filtered: list[str] = []
 
@@ -81,10 +83,14 @@ def generate_compact_diff(
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=cwd
         )
         if proc.returncode != 0:
             err = proc.stderr.strip() if proc.stderr else f"git diff failed with code {proc.returncode}"
+            if "not a git repository" in err.lower():
+                return "[OCCE Git Error: Current directory is not a git repository]", True
             return f"[OCCE Git Error: {err}]", True
 
         raw_diff = proc.stdout.strip()

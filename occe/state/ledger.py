@@ -100,6 +100,14 @@ class TokenLedger:
         return self.session_tokens_sent + self.session_tokens_received
 
     @property
+    def net_savings_percentage(self) -> float:
+        """Calculate overall percentage reduction achieved by OCCE."""
+        baseline = self.session_tokens_sent + self.tokens_saved_cumulative
+        if baseline <= 0:
+            return 0.0
+        return (self.tokens_saved_cumulative / baseline) * 100
+
+    @property
     def current_zone(self) -> AttentionZone:
         """Determine model attention degradation zone."""
         tokens = self.total_context_tokens
@@ -116,6 +124,7 @@ class TokenLedger:
             "turn_count": self.turn_count,
             "total_context_tokens": self.total_context_tokens,
             "tokens_saved_cumulative": self.tokens_saved_cumulative,
+            "net_savings_percentage": round(self.net_savings_percentage, 1),
             "attention_zone": self.current_zone.value,
             "tool_invocations": self.tool_invocations.copy(),
         }
@@ -125,6 +134,7 @@ class TokenLedger:
         zone = self.current_zone
         total = self.total_context_tokens
         saved = self.tokens_saved_cumulative
+        pct = self.net_savings_percentage
 
         if zone == AttentionZone.GREEN:
             status_desc = "[OK] Green Zone (<25k): High attention fidelity. Free models perform accurately."
@@ -136,7 +146,7 @@ class TokenLedger:
         lines = [
             "==================== OCCE Token Ledger ====================",
             f"Active Context:      ~{total:,} tokens",
-            f"Cumulative Saved:    ~{saved:,} tokens",
+            f"Cumulative Saved:    ~{saved:,} tokens ({pct:.1f}% net reduction)",
             f"Turns Recorded:      {self.turn_count}",
             f"Attention Health:    {zone.value} ({status_desc})",
             "----------------- Tool Invocations -----------------",

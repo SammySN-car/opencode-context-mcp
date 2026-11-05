@@ -46,6 +46,41 @@ def test_compress_pytest_with_failure():
     assert "tests/test_api.py .........F" not in result
 
 
+def test_compress_pytest_collection_error():
+    raw_error = (
+        "============================= test session starts =============================\n"
+        "collecting ... \n"
+        "==================================== ERRORS ====================================\n"
+        "________________________ ERROR collecting tests/test_broken.py ________________________\n"
+        "tests/test_broken.py:3: in <module>\n"
+        "    import non_existent_package\n"
+        "E   ModuleNotFoundError: No module named 'non_existent_package'\n"
+        "=========================== short test summary info ===========================\n"
+        "ERROR tests/test_broken.py\n"
+        "!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n"
+        "=============================== 1 error in 0.12s ===============================\n"
+    )
+    result = compress_pytest_output(raw_error)
+    assert "[OCCE Pytest Collection/Runtime Error]" in result
+    assert "ModuleNotFoundError: No module named 'non_existent_package'" in result
+    assert "test_broken.py:3" in result
+
+
+def test_compress_vitest_output():
+    raw_vitest = (
+        "FAIL  tests/auth.test.ts > Authentication > should verify password\n"
+        "Error: Invalid credentials\n"
+        "    at verify (src/auth.ts:15:11)\n\n"
+        "Test Files  1 failed (1)\n"
+        "     Tests  1 failed | 9 passed (10)\n"
+        "  Duration  1.20s\n"
+    )
+    result = compress_jest_output(raw_vitest)
+    assert "OCCE Jest/Vitest Test Report" in result
+    assert "FAIL  tests/auth.test.ts" in result
+    assert "Error: Invalid credentials" in result
+
+
 def test_compress_cargo_test_all_passed():
     raw = (
         "   Compiling my_crate v0.1.0\n"
@@ -137,7 +172,7 @@ def test_compress_jest_with_failure():
         "Tests:       1 failed, 10 passed, 11 total\n"
     )
     result = compress_jest_output(raw)
-    assert "[OCCE Jest Test Report]" in result
+    assert "OCCE Jest" in result
     assert "FAIL src/api.test.ts" in result
     assert "● API Authentication › should reject invalid tokens" in result
     assert "Expected: 401" in result
