@@ -17,6 +17,11 @@ from occe.parsers.test_reducers import (
     compress_test_output,
     run_test_suite,
 )
+from occe.parsers.diff_engine import (
+    filter_diff_headers,
+    compute_text_diff_u0,
+    generate_compact_diff,
+)
 
 __all__ = [
     "generate_python_skeleton",
@@ -33,4 +38,7 @@ __all__ = [
     "compress_jest_output",
     "compress_test_output",
     "run_test_suite",
+    "filter_diff_headers",
+    "compute_text_diff_u0",
+    "generate_compact_diff",
 ]
