@@ -21,15 +21,29 @@ class SkeletonTransformer(ast.NodeTransformer):
         self.preserve_docstring = preserve_docstring
 
     def _create_stub_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.stmt]:
-        """Create a stub body containing at most the first docstring line and an Ellipsis."""
-        new_body: list[ast.stmt] = []
-        if self.preserve_docstring:
-            docstring = ast.get_docstring(node, clean=True)
-            if docstring:
-                first_line = docstring.strip().split("\n")[0].strip()
-                if first_line:
-                    new_body.append(ast.Expr(value=ast.Constant(value=first_line)))
+        """Create a stub body with line-range anchors, docstrings, and Ellipsis.
 
+        Prevents agent edit-rejection loops by explicitly marking omitted line counts
+        and steering models to use `symbol_slice` before attempting code modifications.
+        """
+        new_body: list[ast.stmt] = []
+        start_line = getattr(node, "lineno", None)
+        end_line = getattr(node, "end_lineno", None)
+
+        range_str = ""
+        lines_omitted = 0
+        if start_line is not None and end_line is not None:
+            lines_omitted = max(0, end_line - start_line)
+            range_str = f" [L{start_line}-{end_line}: {lines_omitted} lines omitted]"
+
+        docstring = ast.get_docstring(node, clean=True) if self.preserve_docstring else None
+        if docstring:
+            first_line = docstring.strip().split("\n")[0].strip()
+            comment_text = f"{first_line}{range_str}"
+        else:
+            comment_text = f"...{range_str}. Use symbol_slice to view implementation."
+
+        new_body.append(ast.Expr(value=ast.Constant(value=comment_text)))
         new_body.append(ast.Expr(value=ast.Constant(value=Ellipsis)))
         return new_body
 

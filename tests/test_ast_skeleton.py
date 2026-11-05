@@ -103,7 +103,22 @@ def test_skeleton_preserves_signatures_and_strips_bodies():
     skel_chars = len(skeleton)
     reduction_ratio = (orig_chars - skel_chars) / orig_chars
     print(f"\nOriginal: {orig_chars} chars, Skeleton: {skel_chars} chars, Reduction: {reduction_ratio:.1%}")
-    assert reduction_ratio > 0.45  # Significant reduction
+    assert reduction_ratio > 0.40  # Significant reduction
+
+
+def test_skeleton_function_without_docstring_has_range_stub():
+    code_no_doc = """def process_numbers(a: int, b: int) -> int:
+    step1 = a * 2
+    step2 = b * 3
+    step3 = step1 + step2
+    return step3 * 10
+"""
+    skeleton = generate_python_skeleton(code_no_doc)
+    assert "def process_numbers(a: int, b: int) -> int:" in skeleton
+    assert "lines omitted" in skeleton
+    assert "Use symbol_slice to view implementation" in skeleton
+    assert "..." in skeleton
+    assert "step1 = a * 2" not in skeleton
 
 
 def test_extract_symbol_top_level_function():

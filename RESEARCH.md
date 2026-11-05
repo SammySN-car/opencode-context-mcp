@@ -196,39 +196,64 @@ We adopt a **Dual-Layer Hybrid Architecture**:
 
 ## 6. Algorithmic Specifications: Multi-Test Frameworks & Package Manager Noise Gates
 
-### 6.1 AST Skeleton & Semantic Slicing
+### 6.1 AST Skeleton & Semantic Slicing (The 2-Step Agent Edit Pattern)
 
-#### Python AST Skeleton Extraction Algorithm
-Using Python's standard-library `ast` module, files are parsed without external dependencies:
+#### Addressing the "Skeleton Replacement Trap"
+A known failure mode in agentic coding occurs when an agent inspects a code skeleton and attempts to run an in-place `edit_file` / string-replacement on the stubbed `...` body. Because the real file on disk contains the full 50-line implementation rather than `...`, the search string fails to match, triggering a patch rejection retry loop.
+
+Furthermore, when a function has **no docstring or comment**, a bare `...` risks hallucination (the model mistaking it for literal code) and gives zero indication of line boundaries.
+
+OCCE resolves this via a **2-Step Discovery & Surgical Edit Protocol**:
+1. **Step 1 (Discovery & Navigation via `code_skeleton`)**:
+   - Injects explicit line-range anchors into every stub:
+     - With docstring: `"""Process payment. [L45-88: 43 lines omitted]"""`
+     - Without docstring: `"""... [L45-88: 43 lines omitted. Use symbol_slice to view implementation.]"""`
+   - Gives the agent full architectural awareness and exact line boundaries without token bloat.
+2. **Step 2 (Surgical Extraction via `symbol_slice`)**:
+   - Before modifying code, the agent calls `symbol_slice(path, "symbol_name")` to retrieve the real, un-stubbed implementation.
+   - The agent now possesses the exact on-disk lines to supply to `edit_file`, guaranteeing 100% patch success.
+
+#### Line-Range Annotated Skeleton Algorithm
+Using Python's standard-library `ast` module, line offsets (`lineno`, `end_lineno`) are leveraged directly:
 
 ```python
 import ast
 
 class SkeletonTransformer(ast.NodeTransformer):
-    """Replaces function/method bodies with Ellipsis (...) while preserving signatures."""
-    def __init__(self, max_depth: int = 2):
-        self.depth = 0
+    """Replaces function/method bodies with line-range annotated stubs and Ellipsis."""
+    def __init__(self, max_depth: int = 3, preserve_docstring: bool = True):
+        self.current_depth = 0
         self.max_depth = max_depth
+        self.preserve_docstring = preserve_docstring
+
+    def _create_stub_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.stmt]:
+        start_line = getattr(node, "lineno", None)
+        end_line = getattr(node, "end_lineno", None)
+        range_str = ""
+        if start_line is not None and end_line is not None:
+            lines_omitted = max(0, end_line - start_line)
+            range_str = f" [L{start_line}-{end_line}: {lines_omitted} lines omitted]"
+
+        docstring = ast.get_docstring(node, clean=True) if self.preserve_docstring else None
+        if docstring:
+            first_line = docstring.strip().split("\n")[0].strip()
+            comment_text = f"{first_line}{range_str}"
+        else:
+            comment_text = f"...{range_str}. Use symbol_slice to view implementation."
+
+        return [
+            ast.Expr(value=ast.Constant(value=comment_text)),
+            ast.Expr(value=ast.Constant(value=Ellipsis))
+        ]
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
-        docstring = ast.get_docstring(node, clean=True)
-        new_body: list[ast.stmt] = []
-        if docstring:
-            first_line = docstring.split("\n")[0]
-            new_body.append(ast.Expr(value=ast.Constant(value=first_line)))
-        new_body.append(ast.Expr(value=ast.Constant(value=Ellipsis)))
-        node.body = new_body
+        node.body = self._create_stub_body(node)
         return node
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
-        docstring = ast.get_docstring(node, clean=True)
-        new_body: list[ast.stmt] = []
-        if docstring:
-            first_line = docstring.split("\n")[0]
-            new_body.append(ast.Expr(value=ast.Constant(value=first_line)))
-        new_body.append(ast.Expr(value=ast.Constant(value=Ellipsis)))
-        node.body = new_body
+        node.body = self._create_stub_body(node)
         return node
+```
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         docstring = ast.get_docstring(node, clean=True)

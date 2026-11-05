@@ -1,7 +1,7 @@
 # OpenCode Context Optimizer (OCCE)
 
-[![Tests](https://img.shields.io/badge/tests-56%20passed-success)](tests/)
-[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-57%20passed-success)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
 [![Protocol](https://img.shields.io/badge/MCP-2024--11--05-orange)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -40,8 +40,8 @@ OCCE exposes 6 specialized tools adhering to the Model Context Protocol (MCP):
 
 | Tool | What It Does | Token Reduction |
 | :--- | :--- | :--- |
-| `code_skeleton` | Extracts an AST outline (classes, signatures, type annotations, and first-line docstrings), replacing function bodies with `...`. | **80% – 94%** |
-| `symbol_slice` | Extracts the exact definition of a single requested class, function, or method without reading the surrounding 600 lines of file boilerplate. | **85% – 95%** |
+| `code_skeleton` | Extracts an AST outline (classes, signatures, type annotations, and first-line docstrings) with line-range anchors (`[L45-88: 43 lines omitted]`). Replaces bodies with stubs so agents never hallucinate omitted code. | **80% – 94%** |
+| `symbol_slice` | Extracts the exact, un-stubbed implementation of a single requested class, function, or method. Used in tandem with `code_skeleton` to ensure 100% search/replace accuracy during file edits. | **85% – 95%** |
 | `smart_exec` | Executes shell commands through a 4-stage noise-gate: ANSI escape code stripping, carriage return `\r` collapse, package manager progress bar & spinner suppression, and saliency-preserving head/tail truncation. | **70% – 95%** |
 | `test_compress` | Multi-framework test reducer for **Pytest, Rust (Cargo test), Go test, and Jest/Vitest**. Collapses 100% passing suites into a single 1-line summary; isolates exact failure tracebacks and assertion errors when tests fail. | **90% – 95%** |
 | `diff_compact` | Generates a zero-context (`-U0`) Git diff that eliminates unchanged surrounding lines and git index metadata. | **75% – 85%** |

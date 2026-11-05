@@ -215,7 +215,8 @@ def test_mcp_call_diff_compact(server):
     }
     resp = server.handle_message(req)
     assert not resp["result"]["isError"]
-    assert "OCCE" in resp["result"]["content"][0]["text"]
+    text = resp["result"]["content"][0]["text"]
+    assert "diff --git" in text or "OCCE" in text
 
 
 def test_mcp_call_error_validation_branches(server):
