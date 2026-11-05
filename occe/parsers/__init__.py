@@ -9,6 +9,14 @@ from occe.parsers.noise_gate import (
     sanitize_terminal_output,
     execute_shell_command,
 )
+from occe.parsers.test_reducers import (
+    compress_pytest_output,
+    compress_cargo_test,
+    compress_go_test,
+    compress_jest_output,
+    compress_test_output,
+    run_test_suite,
+)
 
 __all__ = [
     "generate_python_skeleton",
@@ -19,4 +27,10 @@ __all__ = [
     "truncate_head_tail",
     "sanitize_terminal_output",
     "execute_shell_command",
+    "compress_pytest_output",
+    "compress_cargo_test",
+    "compress_go_test",
+    "compress_jest_output",
+    "compress_test_output",
+    "run_test_suite",
 ]
