@@ -11,7 +11,7 @@
 
 ---
 
-## ⚡ The Problem: The Agent Loop Multiplier
+## The Problem: The Agent Loop Multiplier
 
 When using OpenCode CLI with free models routed through the **OpenCode Zen gateway** (`big-pickle`, `mimo-v2.6-flash-free`), models are governed by:
 1. **Sliding-Window Rate Limits**: Server-side quotas tracking in-flight and rolling prompt token volume. Crossing the threshold triggers sudden `Rate limit exceeded` lockouts lasting hours to 24–48 hours.
@@ -34,7 +34,7 @@ With **OCCE**, the exact same 6-turn loop consumes **~6,800 cumulative tokens** 
 
 ---
 
-## 🛠️ The 6 Precision Tools
+## Core Tools
 
 OCCE exposes 6 specialized tools adhering to the Model Context Protocol (MCP):
 
@@ -49,7 +49,7 @@ OCCE exposes 6 specialized tools adhering to the Model Context Protocol (MCP):
 
 ---
 
-## 📊 Quantified Benchmarks
+## Quantified Benchmarks
 
 Measured on realistic Python, Go, and TypeScript repositories:
 
@@ -63,7 +63,7 @@ Measured on realistic Python, Go, and TypeScript repositories:
 
 ---
 
-## 🚀 Quickstart & Setup
+## Quickstart & Setup
 
 OCCE runs on standard Python 3.10+ with **zero external dependencies**.
 
@@ -108,7 +108,7 @@ Add to `claude_desktop_config.json`:
 
 ---
 
-## 🔌 OpenCode Companion Plugin (`occe-guard.ts`)
+## OpenCode Companion Plugin (`occe-guard.ts`)
 
 For users who prefer 100% transparent optimization without changing prompt habits, OCCE includes a companion plugin hook.
 
@@ -118,7 +118,7 @@ Copy `plugins/occe-guard.ts` into `.opencode/plugins/`:
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
@@ -144,20 +144,20 @@ flowchart TD
 
 ---
 
-## 🧪 Running Tests
+## Running Tests
 
-OCCE includes a comprehensive 40-test verification suite covering AST transformations, regex noise suppression, test parsing for 4 frameworks, and JSON-RPC wire protocol compliance:
+OCCE includes a comprehensive 57-test verification suite covering AST transformations, regex noise suppression, test parsing for 4 frameworks, and JSON-RPC wire protocol compliance:
 
 ```bash
 # Install pytest if not already installed
 pip install pytest
 
-# Run all 40 tests
+# Run all 57 tests
 python -m pytest -v
 ```
 
 ---
 
-## 📄 License
+## License
 
 MIT License. Built by [Samar Nathani](https://github.com/SammySN-car).
