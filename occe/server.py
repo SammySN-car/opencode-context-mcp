@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import urllib.parse
 from typing import Any, Dict, List, Optional
 
 from occe.protocol import PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION, TOOL_DEFINITIONS
@@ -55,7 +56,24 @@ class MCPServer:
     def __init__(self):
         self.ledger = TokenLedger()
         self.tombstones = TombstoneTracker()
+        self.workspace_root: Optional[str] = None
         self.running = True
+
+    def _resolve_path(self, raw_path: str) -> Optional[str]:
+        """Resiliently resolve relative or absolute file paths across OS and workspace roots."""
+        cleaned = str(raw_path).strip().strip("'\"")
+        if not cleaned:
+            return None
+        if os.path.exists(cleaned):
+            return os.path.abspath(cleaned)
+        if self.workspace_root:
+            cand = os.path.join(self.workspace_root, cleaned)
+            if os.path.exists(cand):
+                return os.path.abspath(cand)
+        norm = os.path.normpath(cleaned)
+        if os.path.exists(norm):
+            return os.path.abspath(norm)
+        return None
 
     def _format_tool_response(self, text: str, is_error: bool = False) -> Dict[str, Any]:
         """Wrap output in standard MCP tools/call content structure."""
@@ -92,11 +110,12 @@ class MCPServer:
                 if not raw_path:
                     return self._format_tool_response("[OCCE Error: Parameter 'path' is required]", is_error=True)
 
-                if not os.path.exists(raw_path):
+                resolved_path = self._resolve_path(raw_path)
+                if not resolved_path:
                     abs_p = os.path.abspath(raw_path)
                     return self._format_tool_response(f"[OCCE Error: File '{raw_path}' not found at '{abs_p}']", is_error=True)
 
-                with open(raw_path, "r", encoding="utf-8", errors="replace") as f:
+                with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
 
                 depth = arguments.get("depth", 3)
@@ -106,10 +125,10 @@ class MCPServer:
                 opt_tok = estimate_tokens(skeleton)
                 self.ledger.record_savings("code_skeleton", raw_tok, opt_tok)
                 self.ledger.record_turn(input_tokens=opt_tok)
-                self.tombstones.record_read(turn=self.ledger.turn_count, filepath=raw_path, token_count=opt_tok)
+                self.tombstones.record_read(turn=self.ledger.turn_count, filepath=resolved_path, token_count=opt_tok)
 
                 reduction = ((raw_tok - opt_tok) / raw_tok) * 100 if raw_tok > 0 else 0
-                header = f"# [OCCE AST Skeleton: {os.path.basename(raw_path)} | ~{raw_tok} -> ~{opt_tok} tokens ({reduction:.1f}% saved)]\n"
+                header = f"# [OCCE AST Skeleton: {os.path.basename(resolved_path)} | ~{raw_tok} -> ~{opt_tok} tokens ({reduction:.1f}% saved)]\n"
                 return self._format_tool_response(header + skeleton)
 
             elif name == "symbol_slice":
@@ -121,11 +140,12 @@ class MCPServer:
                 if not symbol:
                     return self._format_tool_response("[OCCE Error: Parameter 'symbol' is required]", is_error=True)
 
-                if not os.path.exists(raw_path):
+                resolved_path = self._resolve_path(raw_path)
+                if not resolved_path:
                     abs_p = os.path.abspath(raw_path)
                     return self._format_tool_response(f"[OCCE Error: File '{raw_path}' not found at '{abs_p}']", is_error=True)
 
-                with open(raw_path, "r", encoding="utf-8", errors="replace") as f:
+                with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
 
                 slice_code = extract_symbol(content, symbol)
@@ -175,7 +195,11 @@ class MCPServer:
             elif name == "diff_compact":
                 filepath = arguments.get("filepath")
                 staged = arguments.get("staged", False)
-                diff_text, is_error = generate_compact_diff(filepath=filepath, staged=staged)
+                diff_text, is_error = generate_compact_diff(
+                    filepath=filepath,
+                    staged=staged,
+                    cwd=self.workspace_root
+                )
 
                 opt_tok = estimate_tokens(diff_text)
                 self.ledger.record_savings("diff_compact", raw_tokens=opt_tok * 3, optimized_tokens=opt_tok)
@@ -203,6 +227,18 @@ class MCPServer:
 
         # 1. Initialization Handshake
         if method == "initialize":
+            params = request.get("params", {})
+            root_path = params.get("rootPath")
+            root_uri = params.get("rootUri")
+            if root_path and os.path.isdir(str(root_path)):
+                self.workspace_root = os.path.abspath(str(root_path))
+            elif root_uri and str(root_uri).startswith("file://"):
+                parsed = urllib.parse.unquote(str(root_uri)[7:])
+                if sys.platform == "win32" and parsed.startswith("/") and len(parsed) > 2 and parsed[2] == ":":
+                    parsed = parsed[1:]
+                if os.path.isdir(parsed):
+                    self.workspace_root = os.path.abspath(parsed)
+
             return {
                 "jsonrpc": "2.0",
                 "id": msg_id,

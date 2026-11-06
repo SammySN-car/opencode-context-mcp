@@ -1,7 +1,7 @@
 # OpenCode Context Optimizer (OCCE)
 
-[![Tests](https://img.shields.io/badge/tests-57%20passed-success)](tests/)
-[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-58%20passed-success)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-89%25-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
 [![Protocol](https://img.shields.io/badge/MCP-2024--11--05-orange)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -60,6 +60,24 @@ Measured on realistic Python, Go, and TypeScript repositories:
 | **Package Install (`pip` / `npm`)** | ~3,400 tokens | ~120 tokens (`smart_exec`) | **96.4%** |
 | **Multi-File Git Diff Inspection** | ~2,200 tokens | ~340 tokens (`diff_compact`) | **84.5%** |
 | **Complete 6-Turn Bug Fix & Test Loop** | **51,100 tokens** | **~6,800 tokens** | **86.7% Overall** |
+| **Live Production 130-Turn Session** | **~340,000 tokens** | **~107,000 tokens** | **~232,596 Tokens Saved** |
+
+---
+
+## Architecture: Dual-Layer Defense (MCP + Companion Plugin)
+
+OCCE operates across two coordinated layers:
+
+1. **Precision MCP Server (`occe/server.py`)**:
+   - Zero-dependency Python server exposing 6 precision tools over stdio (`code_skeleton`, `symbol_slice`, `smart_exec`, `test_compress`, `diff_compact`, `token_ledger`).
+   - Polyglot support: AST-based for Python; heuristic block slicing for **TypeScript, TSX, JavaScript, JSX, Go, and Rust**.
+   - Resilient workspace resolution: Automatically consumes `rootPath` and `rootUri` handshakes per MCP (2024-11-05) standard.
+
+2. **OpenCode Companion Plugin (`plugins/occe-guard.js`)**:
+   - Hot-reloaded directly into OpenCode 2.x runtimes without restarting CLI sessions.
+   - **Pre-execution hook (`execute.before`)**: Intercepts unconstrained file dumps and guides agents toward precision AST tools.
+   - **Post-execution hook (`execute.after`)**: Strips ANSI sequences, collapses 100% passing test suites (`pytest`, `cargo`, `jest`/`vitest`), and applies head/tail truncation on verbose logs (>70 lines), `glob` dumps (>40 paths), and `grep` search floods (>35 matches).
+   - **Session context hook (`context`, `compaction`, `generate`)**: Injects high-signal steering guidelines directly into `event.system` before each inference turn.
 
 ---
 

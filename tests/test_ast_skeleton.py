@@ -210,3 +210,34 @@ def test_fallback_heuristic_on_syntax_error():
     """
     skeleton = generate_python_skeleton(broken_code)
     assert "def valid_func" in skeleton or "class AnotherClass" in skeleton
+
+
+def test_polyglot_symbol_extraction_typescript():
+    ts_code = """
+    export interface AuthPayload {
+        token: string;
+        expiresAt: number;
+    }
+
+    export function authenticateUser(payload: AuthPayload): boolean {
+        const isValid = payload.token.length > 10;
+        return isValid;
+    }
+
+    export const refreshSession = async (token: string) => {
+        return { ok: true };
+    };
+    """
+    res_iface = extract_symbol(ts_code, "AuthPayload")
+    assert res_iface is not None
+    assert "interface AuthPayload" in res_iface
+
+    res_fn = extract_symbol(ts_code, "authenticateUser")
+    assert res_fn is not None
+    assert "function authenticateUser" in res_fn
+    assert "isValid" in res_fn
+
+    res_arrow = extract_symbol(ts_code, "refreshSession")
+    assert res_arrow is not None
+    assert "const refreshSession" in res_arrow
+

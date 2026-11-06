@@ -809,3 +809,89 @@ Across a standard 6-turn bug fixing and testing session on OpenCode Zen free tie
 4. **Step 4: Automated Verification Suite (`tests/`)**:
    - Unit tests for all parsers with before/after token measurements.
    - Mock JSON-RPC stdio integration test.
+
+---
+
+## 12. Empirical Field Audit & OpenCode 2 Runtime Internals (Live Findings)
+
+### 12.1 Real-World Session Trace Audit (`opencode.db`)
+On 2026-11-06, two live developer sessions were audited directly from `~/.local/share/opencode/opencode.db` and `opencode.log` using `deepseek-v4.1-flash-free`:
+
+| Session Metric | Session A: `proud-planet` (`nexus_auto`) | Session B: `tidy-canyon` (`se project`) |
+| :--- | :--- | :--- |
+| **Session ID** | `ses_eaa8c081effe0CLfJu0B7FFp69` | `ses_ee0677586ffetCvhuRgbRWLhG0` |
+| **Turns / Messages** | 27 messages, 354 internal sequence records | 16 messages |
+| **Shell Command Invocations**| 18 `shell` commands | 8 `shell` commands |
+| **Raw Tool Output Volume** | 18,489 characters (~4,622 tokens) | 11,420 characters (~2,855 tokens) |
+| **Reasoning Tokens** | 19,100+ tokens | 4,900+ tokens |
+| **Cumulative Lifetime Ingested**| 2,260,282 tokens | 15,479,542 tokens |
+
+### 12.2 The "Inline Patch Indentation Trap"
+In `proud-planet`, the agent needed to modify lines 889–894 of `vortex_collection_helper.py` (~900 LOC). Rather than invoking AST symbol surgery, the model wrote raw PowerShell string-replacement scripts:
+- **Turn 1**: `$patch = @'...'@; (Get-Content ...).Replace(...)` failed with `SyntaxError: expected except or finally block` due to Windows multiline newline & indent mismatch.
+- **Turn 2**: Agent attempted Python `assert s.count(bad) == 1`, crashing with `AssertionError`.
+- **Turn 3**: Agent invoked raw `Get-Content` to inspect whitespace characters.
+- **Turn 4**: Patch succeeded.
+- **Compounding Penalty**: The 1,466-character Python error traceback remained in context across the remaining 18 turns, burning over **22,000 input tokens** purely from the agent loop multiplier.
+
+### 12.3 OpenCode 2.1.4 Runtime Architecture Findings (Reverse-Engineered from `opencode.exe`)
+
+1. **The "Code Mode" MCP Demotion**:
+   - OpenCode 2 splits tools into first-class tools (`shell`, `read`, `write`, `edit`, `grep`, `glob`, `execute`) and Code Mode tools (all MCP servers).
+   - MCP tools are not exposed as direct LLM function declarations. They are wrapped behind the synthetic `execute` tool:
+     ```typescript
+     // Injected by OpenCode 2 into System Message:
+     Use the `execute` tool to call the tools listed below.
+     tools["context-optimizer"].symbol_slice({ path, symbol })
+     ```
+   - OpenCode's catalog generator truncates server listings (`context-optimizer (6 tools, 4 shown)`), hiding `code_skeleton` from initial prompt visibility. Open-weight models like DeepSeek Flash default to standard `shell` and `Get-Content` rather than executing nested JS wrappers unless explicitly steered.
+
+2. **Hook Signature Dissection (`ctx.tool.hook("execute.after")`)**:
+   Reverse engineering of the Bun bytecode in `opencode.exe` revealed the exact event contract dispatched during tool execution:
+   ```javascript
+   // opencode.exe runtime dispatch:
+   let A = {
+     ...T,
+     status: "completed",
+     result: {
+       ...w.value.output === void 0 ? {} : { output: w.value.output },
+       content: w.value.content,
+       ...w.value.metadata === void 0 ? {} : { metadata: w.value.metadata }
+     }
+   };
+   yield* e.trigger("tool", "execute.after", A);
+   let I = yield* n(On(A.result.content, A.result.output));
+   return {
+     ...A.result.output === void 0 ? {} : { output: A.result.output },
+     content: I,
+     ...A.result.metadata === void 0 ? {} : { metadata: A.result.metadata }
+   };
+   ```
+   - **Root Cause of Hook Failure in `occe-guard.js`**: `occe-guard.js` previously checked `typeof event.output === "string"`. In OpenCode 2.1.4, output is stored at **`event.result.output`** (and `event.result.content`). `event.output` was undefined, so ANSI stripping and truncation were bypassed on every shell turn.
+
+3. **System Context Injection (`ctx.session.hook("context")`)**:
+   OpenCode 2 exposes a direct hook into prompt construction:
+   ```javascript
+   await ctx.session.hook("context", async (event) => {
+     // event.system is Array<{ type: "text", text: string }>
+     event.system.push({ type: "text", text: steeringPrompt });
+   });
+   ```
+   System instructions pushed into `event.system` are prepended before inference on every single turn, overriding model biases without needing permission denials.
+
+### 12.4 Cross-Session Empirical Audit: Hidden High-Volume Token Sinks
+A comprehensive scan across 15 historical sessions in `opencode.db` (>8,000 messages, 6,500+ tool calls) revealed critical token sinks beyond shell commands:
+
+1. **Unbounded `glob` Dumps (Up to 50,815 Tokens / Single Call)**:
+   - When models executed `glob("**/*")` on root directories, up to 203,260 characters of Windows system paths, temporary files, and registry traces flooded the context in a single call.
+   - **Fix:** In `occe-guard.js`, `glob` outputs exceeding 40 file paths are now bounded to the first 25 and last 10 paths, omitting intermediate paths with a concise directory summary.
+
+2. **Unrestricted `grep` Floods (Up to 15,235 Tokens / Single Call)**:
+   - Broad `grep` patterns returned up to 371 matches (60,943 characters), cluttering conversation memory across subsequent turns.
+   - **Fix:** `grep` outputs exceeding 35 lines are compressed to the top 20 and trailing 10 matches.
+
+3. **`websearch` & `webfetch` Bloat (Up to 12,867 Tokens / Single Call)**:
+   - Web searches and scrapes injected 40,000–51,000 characters across 200–700 lines of raw HTML navigation menus and search snippets.
+   - **Fix:** Capped search snippet blocks at 45 lines / 8,000 characters to retain core answers while discarding trailing noise.
+
+

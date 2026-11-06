@@ -7,8 +7,33 @@ file mode boilerplate, and index hashes, reducing diff token consumption by 75-8
 from __future__ import annotations
 
 import difflib
+import os
 import subprocess
 from typing import Optional, Tuple
+
+
+def find_git_root(start: Optional[str] = None) -> Optional[str]:
+    """Discover nearest git root directory starting from a directory or file path."""
+    target = os.path.abspath(start or os.getcwd())
+    cur = os.path.dirname(target) if os.path.isfile(target) else target
+    while True:
+        if os.path.exists(os.path.join(cur, ".git")):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+
+    # Fallback: check if the package directory itself is within a git repo
+    pkg_cur = os.path.abspath(os.path.dirname(__file__))
+    while True:
+        if os.path.exists(os.path.join(pkg_cur, ".git")):
+            return pkg_cur
+        parent = os.path.dirname(pkg_cur)
+        if parent == pkg_cur:
+            break
+        pkg_cur = parent
+    return None
 
 
 def filter_diff_headers(raw_diff: str) -> str:
@@ -69,6 +94,8 @@ def generate_compact_diff(
     """
     cmd = ["git", "diff", "-U0", "--no-color", "--ignore-all-space"]
 
+    target_cwd = cwd or (find_git_root(filepath) if filepath else find_git_root())
+
     if staged:
         cmd.append("--staged")
 
@@ -85,7 +112,7 @@ def generate_compact_diff(
             text=True,
             encoding="utf-8",
             errors="replace",
-            cwd=cwd
+            cwd=target_cwd
         )
         if proc.returncode != 0:
             err = proc.stderr.strip() if proc.stderr else f"git diff failed with code {proc.returncode}"

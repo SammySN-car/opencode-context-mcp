@@ -189,6 +189,52 @@ def generate_python_skeleton(
         return _fallback_heuristic_skeleton(source_code)
 
 
+def _extract_symbol_heuristic(source_code: str, symbol_name: str) -> Optional[str]:
+    """Extract class, interface, function, method, or variable block from TS/JS/Go/Rust/C++."""
+    lines = source_code.splitlines()
+    sym_escaped = re.escape(symbol_name.strip())
+
+    patterns = [
+        re.compile(rf'^\s*(?:export\s+(?:default\s+)?)?(?:async\s+)?(?:function|class|interface|type|enum)\s+{sym_escaped}\b'),
+        re.compile(rf'^\s*(?:export\s+)?(?:const|let|var)\s+{sym_escaped}\s*='),
+        re.compile(rf'^\s*(?:public|private|protected|static|readonly|async)*\s*(?:get|set)?\s*{sym_escaped}\s*\('),
+        re.compile(rf'^\s*(?:pub\s+)?(?:async\s+)?fn\s+{sym_escaped}\b'),
+        re.compile(rf'^\s*(?:pub\s+)?(?:struct|enum|trait)\s+{sym_escaped}\b'),
+        re.compile(rf'^\s*func\s+(?:\([^)]+\)\s+)?{sym_escaped}\b'),
+    ]
+
+    start_idx = -1
+    for i, line in enumerate(lines):
+        if any(p.search(line) for p in patterns):
+            start_idx = i
+            break
+
+    if start_idx == -1:
+        return None
+
+    matched_lines: list[str] = []
+    brace_count = 0
+    started_braces = False
+
+    for line in lines[start_idx:]:
+        matched_lines.append(line)
+        open_b = line.count("{")
+        close_b = line.count("}")
+        if open_b > 0:
+            started_braces = True
+        brace_count += open_b - close_b
+
+        if started_braces and brace_count <= 0:
+            break
+        if not started_braces and line.strip().endswith(";") and not line.strip().startswith("//"):
+            break
+        if len(matched_lines) > 250:
+            matched_lines.append("    // ... truncated by OCCE symbol slice ...")
+            break
+
+    return "\n".join(matched_lines) if matched_lines else None
+
+
 def extract_symbol(source_code: str, symbol_name: str) -> Optional[str]:
     """Extract the exact full definition of a symbol (class, function, method, or constant).
 
@@ -196,6 +242,7 @@ def extract_symbol(source_code: str, symbol_name: str) -> Optional[str]:
     - Qualified names: 'ClassName.method_name' or 'ClassName.ATTRIBUTE'
     - Standalone names: 'method_name', 'ClassName', 'CONSTANT_NAME'
     - Property getters and setters: extracts all definitions matching the name
+    - Polyglot fallback: extracts TypeScript, JavaScript, Go, and Rust functions/classes
     """
     if not source_code or not symbol_name:
         return None
@@ -203,7 +250,7 @@ def extract_symbol(source_code: str, symbol_name: str) -> Optional[str]:
     try:
         tree = ast.parse(source_code)
     except SyntaxError:
-        return None
+        return _extract_symbol_heuristic(source_code, symbol_name)
 
     target_class: Optional[str] = None
     target_member: str = symbol_name.strip()
