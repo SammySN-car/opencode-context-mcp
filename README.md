@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
 [![Protocol](https://img.shields.io/badge/MCP-2024--11--05-orange)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![M8ven Trust](https://m8ven.ai/badge/mcp/sammysn-car/opencode-context-mcp)](https://m8ven.ai/mcp/sammysn-car/opencode-context-mcp?s=readme)
+[![M8ven Score](https://m8ven.ai/badge/mcp/sammysn-car-opencode-context-mcp-1cmipu?v=5950fd09ae338e3a70c32cc14b30e2f8)](https://m8ven.ai/mcp/sammysn-car-opencode-context-mcp-1cmipu?s=readme)
 
 > **Context optimization & token-saving MCP server for OpenCode CLI, Claude Code, and Cursor.**  
 > Cut prompt token burn by **75% to 90%** on free-tier models (Big Pickle, MiMo, Qwen, DeepSeek) to prevent sliding-window rate limit lockouts and eliminate "lost-in-the-middle" attention degradation.
