@@ -17,6 +17,16 @@ TOOL_DEFINITIONS = [
             "and docstrings from a source file, replacing bodies with '...'. "
             "Consumes 80-94% fewer tokens than raw file reading."
         ),
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+        "annotations": {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -40,6 +50,16 @@ TOOL_DEFINITIONS = [
             "(e.g., 'PaymentGateway' or 'PaymentGateway.charge' or 'charge'), avoiding the need "
             "to read the entire file."
         ),
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+        "annotations": {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -61,6 +81,16 @@ TOOL_DEFINITIONS = [
             "Execute a shell command with real-time ANSI escape stripping, carriage-return collapse, "
             "package manager progress bar & spinner suppression, and intelligent head/tail truncation."
         ),
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": False,
+        "openWorldHint": True,
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -83,6 +113,16 @@ TOOL_DEFINITIONS = [
             "Run test suites (pytest, cargo test, go test, jest/vitest) and output only failing tests, "
             "assertion errors, and clean stack frames, collapsing passed tests into a 1-line summary."
         ),
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -100,6 +140,16 @@ TOOL_DEFINITIONS = [
             "Generate a zero-context (-U0) git diff of uncommitted changes or specific files, "
             "eliminating unchanged surrounding context lines and git index boilerplate."
         ),
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+        "annotations": {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -121,6 +171,16 @@ TOOL_DEFINITIONS = [
             "Check current session token usage, cumulative savings achieved by OCCE, "
             "and free-model attention health zone (GREEN / YELLOW / RED alert)."
         ),
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+        "annotations": {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
         "inputSchema": {
             "type": "object",
             "properties": {}

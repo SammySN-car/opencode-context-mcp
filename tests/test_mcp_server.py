@@ -57,6 +57,16 @@ def test_mcp_tools_list(server):
     assert "diff_compact" in tool_names
     assert "token_ledger" in tool_names
 
+    # Verify M8ven / OpenAI directory required tool hint annotations
+    hint_keys = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]
+    for t in tools:
+        for k in hint_keys:
+            assert k in t, f"Missing hint '{k}' in root of tool '{t['name']}'"
+            assert isinstance(t[k], bool), f"Hint '{k}' in tool '{t['name']}' must be boolean"
+            assert "annotations" in t, f"Missing annotations dict in tool '{t['name']}'"
+            assert k in t["annotations"], f"Missing hint '{k}' in annotations of tool '{t['name']}'"
+            assert isinstance(t["annotations"][k], bool), f"Annotation '{k}' in tool '{t['name']}' must be boolean"
+
 
 def test_mcp_call_code_skeleton(server, tmp_path):
     py_file = tmp_path / "sample.py"
