@@ -156,10 +156,46 @@ def compress_jest_output(raw_output: str) -> str:
     return sanitize_terminal_output(clean, max_lines=45)
 
 
-def compress_test_output(raw_output: str, command_hint: Optional[str] = None) -> str:
-    """Auto-detect test runner framework and return compressed test output."""
+def compress_linter_output(raw_output: str, command_hint: Optional[str] = None) -> Optional[str]:
+    """Compress linter/typechecker outputs (ruff, mypy, eslint)."""
+    clean = strip_ansi(raw_output)
     hint = (command_hint or "").lower()
 
+    # Ruff check/format
+    if "ruff" in hint or "All checks passed" in clean:
+        if "All checks passed" in clean:
+            match = re.search(r'All checks passed![^\n]*', clean)
+            summary = match.group(0) if match else "All checks passed!"
+            return f"[OCCE Ruff: {summary}]"
+        elif "1 file formatted" in clean or "left unchanged" in clean:
+            match = re.search(r'\d+\s+files?\s+(?:re)?formatted[^\n]*', clean)
+            summary = match.group(0) if match else "Formatting complete"
+            return f"[OCCE Ruff Format: {summary}]"
+
+    # Mypy typecheck
+    if "mypy" in hint or "Success: no issues found" in clean:
+        if "Success: no issues found" in clean:
+            match = re.search(r'Success:\s+no issues found[^\n]*', clean)
+            summary = match.group(0) if match else "Success: no issues found"
+            return f"[OCCE Mypy: {summary}]"
+
+    return None
+
+
+def compress_test_output(raw_output: str, command_hint: Optional[str] = None) -> str:
+    """Auto-detect test runner framework and return compressed test output.
+
+    Supports Pytest (including `uv run pytest`, `python -m pytest`), Cargo test,
+    Go test, Jest/Vitest, and Linters (Ruff, Mypy).
+    """
+    hint = (command_hint or "").lower()
+
+    # Check for linter output first
+    linter_res = compress_linter_output(raw_output, command_hint)
+    if linter_res:
+        return linter_res
+
+    # Pytest (native, uv run, python -m pytest)
     if "pytest" in hint or "test_" in hint or "=== FAILURES ===" in raw_output or "passed in " in raw_output:
         return compress_pytest_output(raw_output)
     elif "cargo test" in hint or "test result:" in raw_output:
@@ -180,20 +216,39 @@ def run_test_suite(
 ) -> Tuple[str, bool]:
     """Execute a test command with strict UTF-8 decoding and noise-gate compression.
 
+    On Windows, executes via PowerShell to support complex test pipelines and
+    environment variable syntax. On Unix, uses bash/sh.
+
     Returns:
         (compressed_report, is_error)
     """
+    import os
     try:
-        proc = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            cwd=cwd,
-            timeout=timeout
-        )
+        if os.name == "nt":
+            args = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]
+            proc = subprocess.run(
+                args,
+                shell=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=cwd,
+                timeout=timeout
+            )
+        else:
+            bash_path = "/bin/bash" if os.path.exists("/bin/bash") else None
+            proc = subprocess.run(
+                command,
+                shell=True,
+                executable=bash_path,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=cwd,
+                timeout=timeout
+            )
         combined_output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
         compressed = compress_test_output(combined_output, command_hint=command)
         is_error = proc.returncode != 0

@@ -13,6 +13,7 @@ TOOL_DEFINITIONS = [
     {
         "name": "code_skeleton",
         "description": (
+            "PREFER THIS OVER READ_FILE for source files > 80 lines. "
             "Extract an AST outline of classes, functions, signatures, argument type hints, "
             "and docstrings from a source file, replacing bodies with '...'. "
             "Consumes 80-94% fewer tokens than raw file reading."
@@ -46,6 +47,7 @@ TOOL_DEFINITIONS = [
     {
         "name": "symbol_slice",
         "description": (
+            "PREFER THIS OVER READ_FILE when inspecting or editing a specific function or class. "
             "Extract the exact implementation of a single class or function by symbol name "
             "(e.g., 'PaymentGateway' or 'PaymentGateway.charge' or 'charge'), avoiding the need "
             "to read the entire file."
@@ -78,8 +80,10 @@ TOOL_DEFINITIONS = [
     {
         "name": "smart_exec",
         "description": (
+            "PREFER THIS OVER BASH/SHELL to execute terminal commands. "
             "Execute a shell command with real-time ANSI escape stripping, carriage-return collapse, "
-            "package manager progress bar & spinner suppression, and intelligent head/tail truncation."
+            "package manager progress bar & spinner suppression, and intelligent head/tail truncation "
+            "to prevent token limit lockouts."
         ),
         "readOnlyHint": False,
         "destructiveHint": True,
@@ -110,8 +114,8 @@ TOOL_DEFINITIONS = [
     {
         "name": "test_compress",
         "description": (
-            "Run test suites (pytest, cargo test, go test, jest/vitest) and output only failing tests, "
-            "assertion errors, and clean stack frames, collapsing passed tests into a 1-line summary."
+            "PREFER THIS OVER BASH for running test suites (pytest, cargo test, go test, jest/vitest, ruff, mypy). "
+            "Output only failing tests, assertion errors, and clean stack frames, collapsing passed tests into a 1-line summary."
         ),
         "readOnlyHint": False,
         "destructiveHint": False,
@@ -137,7 +141,8 @@ TOOL_DEFINITIONS = [
     {
         "name": "diff_compact",
         "description": (
-            "Generate a zero-context (-U0) git diff of uncommitted changes or specific files, "
+            "PREFER THIS OVER RAW GIT DIFF. "
+            "Generate a zero-context (-U0) git diff of uncommitted changes, staged changes, or untracked files, "
             "eliminating unchanged surrounding context lines and git index boilerplate."
         ),
         "readOnlyHint": True,

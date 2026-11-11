@@ -121,6 +121,14 @@ def test_generate_compact_diff_with_local_changes(tmp_path):
     assert "--- a/hello.py" in dirty_diff
     assert "+print('version 2 - modified')" in dirty_diff
 
+    # Untracked new file check
+    new_untracked = tmp_path / "brand_new.py"
+    new_untracked.write_text("def brand_new_func():\n    return 42\n", encoding="utf-8")
+    untracked_diff, err = generate_compact_diff(filepath="brand_new.py", cwd=repo)
+    assert not err
+    assert "+def brand_new_func():" in untracked_diff
+    assert "+    return 42" in untracked_diff
+
 
 def test_generate_compact_diff_non_git_repo(tmp_path):
     import os

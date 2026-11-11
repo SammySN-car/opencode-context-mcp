@@ -135,20 +135,40 @@ def execute_shell_command(
 ) -> Tuple[str, bool]:
     """Execute a shell command with strict UTF-8 decoding and noise-gate filtering.
 
+    On Windows, executes via PowerShell (-NoProfile -Command) to natively support
+    PowerShell cmdlets, scripts, and environment variable expansions. On Unix,
+    defaults to bash/sh.
+
     Returns:
         (sanitized_output, is_error)
     """
+    import os
     try:
-        proc = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            cwd=cwd,
-            timeout=timeout
-        )
+        if os.name == "nt":
+            args = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]
+            proc = subprocess.run(
+                args,
+                shell=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=cwd,
+                timeout=timeout
+            )
+        else:
+            bash_path = "/bin/bash" if os.path.exists("/bin/bash") else None
+            proc = subprocess.run(
+                command,
+                shell=True,
+                executable=bash_path,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=cwd,
+                timeout=timeout
+            )
         combined_output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
         sanitized = sanitize_terminal_output(combined_output, max_lines=max_lines)
         is_error = proc.returncode != 0

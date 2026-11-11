@@ -122,6 +122,23 @@ def generate_compact_diff(
 
         raw_diff = proc.stdout.strip()
         if not raw_diff:
+            # If a specific filepath was provided, check if it's an untracked new file
+            if filepath:
+                resolved_fp = filepath if os.path.isabs(filepath) else os.path.join(target_cwd or ".", filepath)
+                if os.path.exists(resolved_fp) and os.path.isfile(resolved_fp):
+                    try:
+                        with open(resolved_fp, "r", encoding="utf-8", errors="replace") as f:
+                            new_content = f.read()
+                        rel_name = os.path.relpath(resolved_fp, target_cwd) if target_cwd else os.path.basename(resolved_fp)
+                        untracked_diff = compute_text_diff_u0(
+                            "",
+                            new_content,
+                            fromfile="/dev/null",
+                            tofile=f"b/{rel_name.replace(os.sep, '/')}"
+                        )
+                        return filter_diff_headers(untracked_diff), False
+                    except Exception:
+                        pass
             return "[OCCE: Working directory clean (no changes)]", False
 
         clean_diff = filter_diff_headers(raw_diff)

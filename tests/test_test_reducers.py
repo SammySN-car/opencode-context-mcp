@@ -189,7 +189,16 @@ def test_compress_test_output_auto_detection():
     # Pytest auto-detect
     pytest_raw = "42 passed in 1.25s"
     assert "OCCE Pytest:" in compress_test_output(pytest_raw, command_hint="pytest tests/")
+    assert "OCCE Pytest:" in compress_test_output(pytest_raw, command_hint="uv run --with matplotlib pytest")
 
     # Cargo auto-detect
     cargo_raw = "test result: ok. 15 passed; 0 failed"
     assert "OCCE Cargo Test:" in compress_test_output(cargo_raw, command_hint="cargo test")
+
+    # Ruff auto-detect
+    ruff_raw = "All checks passed!\n"
+    assert "OCCE Ruff: All checks passed!" in compress_test_output(ruff_raw, command_hint="ruff check .")
+
+    # Mypy auto-detect
+    mypy_raw = "Success: no issues found in 18 source files\n"
+    assert "OCCE Mypy: Success: no issues found in 18 source files" in compress_test_output(mypy_raw, command_hint="mypy src/")

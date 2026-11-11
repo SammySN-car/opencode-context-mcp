@@ -113,3 +113,15 @@ def test_execute_shell_command_success():
 def test_execute_shell_command_error():
     output, is_error = execute_shell_command("python -c \"import sys; sys.exit(42)\"")
     assert is_error
+
+
+def test_execute_shell_command_powershell_syntax():
+    import os
+    if os.name == "nt":
+        output, is_error = execute_shell_command("Write-Output 'PowerShell Native In OCCE'")
+        assert not is_error
+        assert "PowerShell Native In OCCE" in output
+    else:
+        output, is_error = execute_shell_command("echo 'Unix Native In OCCE'")
+        assert not is_error
+        assert "Unix Native In OCCE" in output
