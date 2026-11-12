@@ -171,6 +171,47 @@ TOOL_DEFINITIONS = [
         }
     },
     {
+        "name": "file_slice",
+        "description": (
+            "PREFER THIS OVER READ_FILE when inspecting specific lines or sections of Markdown, JSON, YAML, or code files. "
+            "Extracts a bounded line window with line-number anchors, consuming up to 90% fewer tokens than dumping full files."
+        ),
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+        "annotations": {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to the file to inspect."
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "1-based starting line number (default: 1).",
+                    "default": 1
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "1-based ending line number (optional)."
+                },
+                "max_lines": {
+                    "type": "integer",
+                    "description": "Maximum number of lines to return (default: 60).",
+                    "default": 60
+                }
+            },
+            "required": ["path"]
+        }
+    },
+    {
         "name": "token_ledger",
         "description": (
             "Check current session token usage, cumulative savings achieved by OCCE, "

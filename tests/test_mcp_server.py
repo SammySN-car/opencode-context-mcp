@@ -55,6 +55,7 @@ def test_mcp_tools_list(server):
     assert "smart_exec" in tool_names
     assert "test_compress" in tool_names
     assert "diff_compact" in tool_names
+    assert "file_slice" in tool_names
     assert "token_ledger" in tool_names
 
     # Verify M8ven / OpenAI directory required tool hint annotations
@@ -135,6 +136,27 @@ def test_mcp_call_smart_exec(server):
     resp = server.handle_message(req)
     assert not resp["result"]["isError"]
     assert "Hello from MCP smart_exec" in resp["result"]["content"][0]["text"]
+
+
+def test_mcp_call_file_slice(server, tmp_path):
+    f = tmp_path / "notes.txt"
+    f.write_text("Alpha\nBeta\nGamma\nDelta\nEpsilon\n", encoding="utf-8")
+    req = {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {
+            "name": "file_slice",
+            "arguments": {"path": str(f), "start_line": 2, "end_line": 4}
+        }
+    }
+    resp = server.handle_message(req)
+    assert not resp["result"]["isError"]
+    text = resp["result"]["content"][0]["text"]
+    assert "Beta" in text
+    assert "Gamma" in text
+    assert "Delta" in text
+    assert "Alpha" not in text
 
 
 def test_mcp_call_token_ledger(server):

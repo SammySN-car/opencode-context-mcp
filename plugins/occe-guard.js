@@ -11,8 +11,8 @@ const remindedSessions = (globalThis.__occeShellReminded ??= new Set());
 
 export const OCCE_STEERING_INSTRUCTIONS = [
   "# OCCE Precision & Token-Conservation Guidelines:",
-  "1. Precision Inspection: For code files (>100 lines), prefer extracting target functions/classes via `tools[\"context-optimizer\"].symbol_slice({ path, symbol })` or signatures via `code_skeleton` inside `execute`, rather than dumping full raw files.",
-  "2. Indentation Safety: Do NOT write multi-line inline PowerShell string-replacement scripts (`$patch = @'...'@`). Use the built-in `edit` tool to avoid syntax and whitespace mismatch errors.",
+  "1. Precision Inspection: For code files (>80 lines), prefer extracting target functions/classes via `tools[\"context-optimizer\"].symbol_slice({ path, symbol })` or signatures via `code_skeleton`. For docs/JSON/YAML/configs, use `file_slice({ path, start_line, end_line })`.",
+  "2. Indentation Safety: Do NOT write multi-line inline PowerShell string-replacement scripts (`$code = @'...'@`). Use the built-in `edit` tool or `file_slice` to avoid syntax and whitespace mismatch errors.",
   "3. Scoped Search: Avoid broad root-level `glob('**/*')` or unrestricted `grep`. Always specify narrow subdirectory paths to keep context high-signal.",
   "4. Token Health: To check session token health and Zen attention zones, call `tools[\"context-optimizer\"].token_ledger()`."
 ].join("\n");
@@ -90,6 +90,25 @@ export function processToolOutput(toolName, rawText) {
 
   // 1. Shell / Bash command output compression
   if (toolName === "shell" || toolName === "bash") {
+    // Collapse clean git status (strictly when there are no modified or untracked files)
+    const isCleanGitStatus = (
+      text.includes("nothing to commit, working tree clean") ||
+      (/^##\s+[^\r\n]+$/.test(text.trim()) && !/[\r\n]\s*[MADRCU?!\s]/i.test(text))
+    );
+    if (isCleanGitStatus) {
+      const branchMatch = text.match(/##\s+([^\s\.\n]+)/);
+      const branch = branchMatch ? branchMatch[1] : "current branch";
+      return `[OCCE Guard: Git working tree clean on ${branch}]`;
+    }
+
+    // Collapse clean linter runs (Ruff, Mypy)
+    if (text.includes("All checks passed!") || text.includes("Success: no issues found in")) {
+      const match = text.match(/(All checks passed![^\n]*|Success:\s+no issues found[^\n]*)/);
+      if (match) {
+        return `[OCCE Guard: ${match[1]}]`;
+      }
+    }
+
     // Collapse 100% passing pytest suites
     if (text.includes("passed in") && !text.includes("FAILED") && !text.includes("FAILURES") && !text.includes("ERRORS")) {
       const passMatch = text.match(/(\d+\s+passed[^\n]*in\s+[\d\.]+s)/);
@@ -177,10 +196,10 @@ export function processToolOutput(toolName, rawText) {
   // 5. Read tool: Large file notice
   if (toolName === "read") {
     const lines = text.split("\n");
-    if (lines.length > 250) {
+    if (lines.length > 200) {
       return (
         `[OCCE Context Notice: Ingested large file (${lines.length} lines, ~${Math.round(lines.length * 7.5)} tokens). ` +
-        `For future turns, use MCP tool 'code_skeleton' or 'symbol_slice' to conserve rate limits.]\n\n` +
+        `For future turns, use OCCE tool 'file_slice', 'code_skeleton', or 'symbol_slice' to conserve rate limits.]\n\n` +
         text
       );
     }

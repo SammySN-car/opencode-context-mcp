@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from occe.protocol import PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION, TOOL_DEFINITIONS
 from occe.parsers.ast_skeleton import generate_python_skeleton, extract_symbol
+from occe.parsers.file_slice import slice_file_lines
 from occe.parsers.noise_gate import execute_shell_command
 from occe.parsers.test_reducers import run_test_suite
 from occe.parsers.diff_engine import generate_compact_diff
@@ -206,6 +207,32 @@ class MCPServer:
                 self.ledger.record_turn(input_tokens=opt_tok)
 
                 return self._format_tool_response(diff_text, is_error=is_error)
+
+            elif name == "file_slice":
+                raw_path = str(arguments.get("path", "")).strip().strip("'\"")
+                if not raw_path:
+                    return self._format_tool_response("[OCCE Error: Parameter 'path' is required]", is_error=True)
+
+                resolved_path = self._resolve_path(raw_path)
+                if not resolved_path:
+                    abs_p = os.path.abspath(raw_path)
+                    return self._format_tool_response(f"[OCCE Error: File '{raw_path}' not found at '{abs_p}']", is_error=True)
+
+                start_line = arguments.get("start_line", 1)
+                end_line = arguments.get("end_line")
+                max_lines = arguments.get("max_lines", 60)
+
+                slice_text, is_error = slice_file_lines(
+                    filepath=resolved_path,
+                    start_line=start_line,
+                    end_line=end_line,
+                    max_lines=max_lines
+                )
+
+                opt_tok = estimate_tokens(slice_text)
+                self.ledger.record_savings("file_slice", raw_tokens=opt_tok * 5, optimized_tokens=opt_tok)
+                self.ledger.record_turn(input_tokens=opt_tok)
+                return self._format_tool_response(slice_text, is_error=is_error)
 
             elif name == "token_ledger":
                 report = self.ledger.format_status_report()
