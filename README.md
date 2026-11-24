@@ -109,6 +109,14 @@ python -m occe.codemode_server
 python -m occe.server --codemode
 ```
 
+### Automatic Usage Across Every Session
+
+1. **Register `occe-codemode` globally** so every new session loads it from any directory:
+   - **Claude Code:** `claude mcp add -s user occe-codemode -- python -m occe.codemode_server`
+   - **Codex CLI:** `codex mcp add occe-codemode -- python -m occe.codemode_server`
+   - **Cursor / OpenCode:** Add `occe-codemode` to `~/.cursor/mcp.json` or `~/.config/opencode/opencode.jsonc` (see [`examples/codemode_configs.md`](examples/codemode_configs.md)).
+2. **Add global steering rules** (`~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`, `~/.config/opencode/AGENTS.md`) instructing agents to prefer `execute_occe_ts` (`Promise.all` batching, `occe.codeSkeleton()`, `occe.testCompress()`, `occe.diffCompact()`, `occe.sessionHandoff()`) over raw shell file dumps, diffs, and test runs.
+
 **Research & Architecture Docs:** [`RESEARCH.md`](RESEARCH.md) · [`CODEX_FIELD_AUDIT.md`](CODEX_FIELD_AUDIT.md) · [`OCCE_CODEMODE_DESIGN.md`](OCCE_CODEMODE_DESIGN.md) · [`examples/codemode_configs.md`](examples/codemode_configs.md)
 
 ---
