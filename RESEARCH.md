@@ -958,5 +958,15 @@ To empirically prove that OCCE preserves 100% of the agent's work quality, we es
 | **4. Shell Error Propagation** | Noise-gates might swallow stderr or exit codes. | `smart_exec` preserves nonzero return codes, full stderr, and exception text on failure. | Verified: Critical runtime exceptions propagate directly to host with `is_error=True`. |
 | **5. Model Attention Health** | Beyond 32k tokens, open-weight models suffer from **"Lost in the Middle"** (forgetting instructions, repeating tool calls). | Cutting prompt bloat by 80–90% keeps agents in the **Green Attention Zone (<25k tokens)**, directly boosting instruction-following reliability. | Verified across multi-thousand turn sessions. |
 
+---
+
+## 14. Multi-Agent Codex & Claude Code Audit + v3 TypeScript Code Mode
+
+Subsequent production audits across **Codex CLI** (`20` rollouts, `89.38 MB`, `4,216` tool calls, `378.9M` tokens across the two primary coordinator threads, `99.2%` of turns in the **RED Attention Zone >40K**) and **paid Claude Code** (`15.02 MB`, `444.29M` tokens, `618` sequential `Bash`/`PowerShell` calls) exposed multi-agent waste vectors beyond single-tool compression: subagent cold-start duplication, generated-artifact diff floods (`docs/openapi.yaml`, lockfiles), polling/wait overhead, and quota-cliff handoffs.
+
+- Full empirical audit: [`CODEX_FIELD_AUDIT.md`](CODEX_FIELD_AUDIT.md)
+- Architectural design & implementation spec (inspired by Cloudflare Code Mode): [`OCCE_CODEMODE_DESIGN.md`](OCCE_CODEMODE_DESIGN.md)
+- Implemented runtime: `occe/codemode_server.py`, `occe/rpc_bridge.py`, `occe/handoff.py`, `ts-sdk/occe.d.ts`, `ts-sdk/sandbox_runner.mjs` (`75` passing pytest tests).
+
 
 

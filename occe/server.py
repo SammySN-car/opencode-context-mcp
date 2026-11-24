@@ -196,10 +196,12 @@ class MCPServer:
             elif name == "diff_compact":
                 filepath = arguments.get("filepath")
                 staged = arguments.get("staged", False)
+                exclude_generated = arguments.get("exclude_generated", True)
                 diff_text, is_error = generate_compact_diff(
                     filepath=filepath,
                     staged=staged,
-                    cwd=self.workspace_root
+                    cwd=self.workspace_root,
+                    exclude_generated=bool(exclude_generated),
                 )
 
                 opt_tok = estimate_tokens(diff_text)
@@ -362,6 +364,11 @@ class MCPServer:
 
 def main():
     """Main entrypoint for the OCCE MCP server CLI."""
+    if "--codemode" in sys.argv[1:]:
+        from occe.codemode_server import main as codemode_main
+
+        codemode_main()
+        return
     server = MCPServer()
     server.run_stdio_loop()
 

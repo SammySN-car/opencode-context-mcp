@@ -1,14 +1,14 @@
 # OpenCode Context Optimizer (OCCE)
 
-[![Tests](https://img.shields.io/badge/tests-70%20passed-success)](tests/)
+[![Tests](https://img.shields.io/badge/tests-75%20passed-success)](tests/)
 [![Coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
 [![Protocol](https://img.shields.io/badge/MCP-2024--11--05-orange)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![M8ven Score](https://m8ven.ai/badge/mcp/sammysn-car-opencode-context-mcp-1cmipu?v=5950fd09ae338e3a70c32cc14b30e2f8)](https://m8ven.ai/mcp/sammysn-car-opencode-context-mcp-1cmipu?s=readme)
 
-> **Context optimization & token-saving MCP server for OpenCode CLI, Claude Code, and Cursor.**  
-> Cut prompt token burn by **75% to 90%** on free-tier models (Big Pickle, MiMo, Qwen, DeepSeek) to prevent sliding-window rate limit lockouts and eliminate "lost-in-the-middle" attention degradation.
+> **Context optimization, token-saving MCP server & TypeScript Code-Mode runtime for Codex CLI, Claude Code, OpenCode CLI, and Cursor.**
+> Cut prompt token burn by **75% to 90%+** across free-tier and paid models (Codex, Claude Sonnet, Big Pickle, MiMo, Qwen, DeepSeek) to prevent sliding-window rate limit lockouts, eliminate "lost-in-the-middle" attention degradation, and collapse multi-turn tool loops into a single TypeScript execution turn.
 
 ---
 
@@ -65,6 +65,8 @@ Measured on realistic Python, Go, and TypeScript repositories, and verified acro
 | **Multi-File Git Diff Inspection** | ~2,200 tokens | ~340 tokens (`diff_compact`) | **84.5%** | Automated Benchmarks |
 | **Complete 6-Turn Bug Fix & Test Loop** | **51,100 tokens** | **~6,800 tokens** | **86.7% Overall** | Synthetic E2E |
 | **Mega-Session Lifetime Accumulation** | **17,400,000 tokens** (Triggered 22h 429 lockout) | **~2,600,000 tokens** | **~85.1% Total Saved** | **Live Forensics Audit** |
+| **Codex Multi-Agent Run (20 Rollouts)** | **378.9M tokens** (`99.2%` RED Zone, `4,216` calls) | **~79.6% `exec` reduction** + Code Mode | **~82–88% Fewer Turns** | **[Codex Field Audit](CODEX_FIELD_AUDIT.md)** |
+| **Paid Claude Code Session** | **444.3M tokens** (`618` Bash/PS calls) | Code Mode (`execute_occe_ts`) | **Single-Turn Batching** | **Live `.claude` Audit** |
 
 ---
 
@@ -87,6 +89,27 @@ Verified by our automated **Agent Quality Benchmark Suite** ([`tests/test_agent_
    - Preserves nonzero return codes, full stderr, and exception tracebacks on command failure.
 5. **Attention Health Preservation**:
    - Beyond 32k tokens, open-weight models suffer from **"Lost in the Middle"** (forgetting instructions, repeating tool calls). By keeping context under 25k tokens, OCCE keeps agents in the **Green Attention Zone**, directly improving code generation quality and task completion rates.
+
+---
+
+## OCCE v3: TypeScript Code Mode (`execute_occe_ts`)
+
+Inspired by **Cloudflare Code Mode** (`@cloudflare/codemode`), OCCE v3 eliminates multi-turn MCP round-trips by exposing a single `execute_occe_ts` tool backed by a typed TypeScript SDK (`ts-sdk/occe.d.ts`) and a locked-down Node `v22+` V8 `vm.Context` sandbox (`ts-sdk/sandbox_runner.mjs`):
+
+- **Zero Intermediate Context Leakage:** Agents compose `Promise.all`, loops, and filters against `occe.codeSkeleton()`, `occe.symbolSlice()`, `occe.fileSlice()`, `occe.smartExec()`, `occe.testCompress()`, `occe.diffCompact()`, `occe.tokenLedger()`, and `occe.sessionHandoff()` inside the V8 isolate—returning **only** the distilled final result.
+- **Strict Sandbox Isolation:** Uses Node's built-in `stripTypeScriptTypes` inside a `vm.Context` with **no `fs`, `process`, `require`, `import`, or external `fetch`**. All workspace access flows through `occe/rpc_bridge.py` (`127.0.0.1` + per-session `X-OCCE-Token`).
+- **Generated-Artifact Diff Suppression:** `diff_compact` automatically summarizes lockfiles (`uv.lock`, `package-lock.json`, etc.), OpenAPI specs (`docs/openapi.yaml`), and binary/diagram diffs unless explicitly requested via `filepath`.
+- **Single-Call Quota Handoff:** `occe.sessionHandoff()` snapshots branch, HEAD SHA, `git status -sb`, last 5 commits, compact diff, and `TokenLedger` in one call.
+
+Launch in Code Mode for **Codex CLI, Claude Code, OpenCode CLI, or Cursor** (see [`examples/codemode_configs.md`](examples/codemode_configs.md)):
+
+```bash
+python -m occe.codemode_server
+# or:
+python -m occe.server --codemode
+```
+
+**Research & Architecture Docs:** [`RESEARCH.md`](RESEARCH.md) · [`CODEX_FIELD_AUDIT.md`](CODEX_FIELD_AUDIT.md) · [`OCCE_CODEMODE_DESIGN.md`](OCCE_CODEMODE_DESIGN.md) · [`examples/codemode_configs.md`](examples/codemode_configs.md)
 
 ---
 
@@ -202,10 +225,10 @@ flowchart TD
 
 ## Running Tests
 
-OCCE includes a comprehensive 70-test verification suite covering AST transformations, regex noise suppression, test parsing for 4 frameworks, line-range slicing, quality fidelity benchmarks, and JSON-RPC wire protocol compliance:
+OCCE includes a comprehensive 75-test verification suite covering AST transformations, regex noise suppression, test parsing for 4 frameworks, line-range slicing, quality fidelity benchmarks, JSON-RPC wire protocol compliance, and TypeScript Code-Mode V8 sandbox isolation:
 
 ```bash
-# Run all 70 tests
+# Run all 75 tests
 pytest -v
 
 # Run node.js guard hook compression tests

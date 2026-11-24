@@ -81,11 +81,61 @@ def compute_text_diff_u0(
     return diff_text if diff_text else "[OCCE: No changes detected]"
 
 
+GENERATED_EXACT_NAMES = {
+    "package-lock.json",
+    "uv.lock",
+    "poetry.lock",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "Cargo.lock",
+    "openapi.yaml",
+    "openapi.json",
+}
+GENERATED_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".mmd")
+
+
+def _is_generated_path(path_str: str) -> bool:
+    norm = path_str.replace("\\", "/").lstrip("ab/")
+    base = os.path.basename(norm)
+    return base in GENERATED_EXACT_NAMES or base.lower().endswith(GENERATED_SUFFIXES)
+
+
+def summarize_generated_sections(diff_text: str) -> str:
+    """Collapse diffs for lockfiles and generated specs/diagrams into 1-line summaries."""
+    if not diff_text:
+        return diff_text
+
+    sections = diff_text.split("\ndiff --git ")
+    out_parts: list[str] = []
+
+    for idx, raw_sec in enumerate(sections):
+        sec = raw_sec if idx == 0 else "diff --git " + raw_sec
+        if not sec.startswith("diff --git "):
+            out_parts.append(sec)
+            continue
+
+        header_line = sec.splitlines()[0]
+        parts = header_line.split()
+        target_path = parts[-1][2:] if len(parts) >= 4 and parts[-1].startswith("b/") else header_line
+        if _is_generated_path(target_path):
+            added = sum(1 for ln in sec.splitlines() if ln.startswith("+") and not ln.startswith("+++"))
+            removed = sum(1 for ln in sec.splitlines() if ln.startswith("-") and not ln.startswith("---"))
+            out_parts.append(
+                f"[OCCE Diff Summary: {target_path} (+{added} / -{removed} lines omitted; "
+                f"pass filepath='{target_path}' to inspect)]"
+            )
+        else:
+            out_parts.append(sec)
+
+    return "\n".join(out_parts)
+
+
 def generate_compact_diff(
     filepath: Optional[str] = None,
     staged: bool = False,
     commit: Optional[str] = None,
-    cwd: Optional[str] = None
+    cwd: Optional[str] = None,
+    exclude_generated: bool = True,
 ) -> Tuple[str, bool]:
     """Generate a zero-context (-U0) git diff for modified or staged files.
 
@@ -142,6 +192,8 @@ def generate_compact_diff(
             return "[OCCE: Working directory clean (no changes)]", False
 
         clean_diff = filter_diff_headers(raw_diff)
+        if exclude_generated and not filepath:
+            clean_diff = summarize_generated_sections(clean_diff)
         return clean_diff, False
 
     except FileNotFoundError:

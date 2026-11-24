@@ -40,6 +40,7 @@ dev = [
 
 [project.scripts]
 occe = "occe.server:main"
+occe-codemode = "occe.codemode_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
