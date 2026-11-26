@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from occe.protocol import PROTOCOL_VERSION, SERVER_NAME
 from occe.rpc_bridge import HostRPCBridge
 from occe.server import MCPServer
+from occe.state.ledger import estimate_tokens
 
 logger = logging.getLogger("occe.codemode")
 
@@ -67,8 +68,8 @@ def build_codemode_tool_definitions() -> List[Dict[str, Any]]:
                     },
                     "timeout_ms": {
                         "type": "integer",
-                        "description": "Execution timeout in milliseconds (default: 30000, max: 120000).",
-                        "default": 30000,
+                        "description": "Execution timeout in milliseconds (default: 60000, max: 300000).",
+                        "default": 60000,
                     },
                 },
                 "required": ["code"],
@@ -99,7 +100,7 @@ class CodeModeMCPServer:
             self.bridge.stop()
             self._bridge_started = False
 
-    def execute_ts(self, code: str, timeout_ms: int = 30_000) -> Dict[str, Any]:
+    def execute_ts(self, code: str, timeout_ms: int = 60_000) -> Dict[str, Any]:
         rpc_url = self.start_bridge()
         req_payload = json.dumps(
             {
@@ -109,7 +110,7 @@ class CodeModeMCPServer:
                 "timeoutMs": timeout_ms,
             }
         )
-        timeout_sec = max(5.0, min(float(timeout_ms) / 1000.0 + 5.0, 125.0))
+        timeout_sec = max(5.0, min(float(timeout_ms) / 1000.0 + 5.0, 305.0))
         try:
             proc = subprocess.run(
                 [self.node_bin, "--no-warnings", _RUNNER_PATH],
@@ -144,8 +145,10 @@ class CodeModeMCPServer:
             parsed = json.loads(stdout)
             is_err = not bool(parsed.get("ok", False))
             formatted = json.dumps(parsed, indent=2)
+            self.base_server.ledger.record_turn(input_tokens=estimate_tokens(formatted))
             return self.base_server._format_tool_response(formatted, is_error=is_err)
         except json.JSONDecodeError:
+            self.base_server.ledger.record_turn(input_tokens=estimate_tokens(stdout))
             return self.base_server._format_tool_response(stdout, is_error=proc.returncode != 0)
 
     def handle_message(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:

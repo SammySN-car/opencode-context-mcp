@@ -13,8 +13,8 @@
 import vm from "node:vm";
 import { stripTypeScriptTypes } from "node:module";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
-const MAX_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
+const MAX_TIMEOUT_MS = 300_000;
 const DEFAULT_MAX_OUTPUT_CHARS = 16_000;
 const MAX_LOG_CHARS = 4_000;
 

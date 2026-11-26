@@ -63,7 +63,19 @@ class HostRPCBridge:
                             workspace_root=bridge.mcp_server.workspace_root,
                         )
                     else:
-                        res = bridge.mcp_server.execute_tool(method, args)
+                        ledger = bridge.mcp_server.ledger
+                        prev_turns = ledger.turn_count
+                        prev_sent = ledger.session_tokens_sent
+                        prev_suppress = getattr(bridge.mcp_server, "suppress_zone_notices", False)
+                        bridge.mcp_server.suppress_zone_notices = True
+                        try:
+                            res = bridge.mcp_server.execute_tool(method, args)
+                        finally:
+                            bridge.mcp_server.suppress_zone_notices = prev_suppress
+                        # Sub-calls stay inside the V8 isolate; only the outer execute_occe_ts
+                        # return value enters the LLM context, so don't inflate turn/context counters.
+                        ledger.turn_count = prev_turns
+                        ledger.session_tokens_sent = prev_sent
                         content = res.get("content", [])
                         text = content[0].get("text", "") if content else ""
                         payload = {

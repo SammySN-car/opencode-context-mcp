@@ -59,6 +59,7 @@ class MCPServer:
         self.tombstones = TombstoneTracker()
         self.workspace_root: Optional[str] = None
         self.running = True
+        self.suppress_zone_notices = False
 
     def _resolve_path(self, raw_path: str) -> Optional[str]:
         """Resiliently resolve relative or absolute file paths across OS and workspace roots."""
@@ -82,16 +83,17 @@ class MCPServer:
         final_text = text
 
         # Non-intrusive budget guidance appended when context crosses thresholds
-        if zone == AttentionZone.YELLOW:
-            final_text += (
-                f"\n\n[OCCE Notice: Session context in YELLOW ZONE (~{self.ledger.total_context_tokens:,} tokens). "
-                f"Attention fading. Prefer code_skeleton & test_compress over raw reads.]"
-            )
-        elif zone == AttentionZone.RED:
-            final_text += (
-                f"\n\n[OCCE ALERT: Session context in RED ZONE (~{self.ledger.total_context_tokens:,} tokens). "
-                f"High risk of Zen rate limit lockout & hallucinated edits! Run /compact or restart session.]"
-            )
+        if not self.suppress_zone_notices:
+            if zone == AttentionZone.YELLOW:
+                final_text += (
+                    f"\n\n[OCCE Notice: Session context in YELLOW ZONE (~{self.ledger.total_context_tokens:,} tokens). "
+                    f"Attention fading. Prefer code_skeleton & test_compress over raw reads.]"
+                )
+            elif zone == AttentionZone.RED:
+                final_text += (
+                    f"\n\n[OCCE ALERT: Session context in RED ZONE (~{self.ledger.total_context_tokens:,} tokens). "
+                    f"High risk of Zen rate limit lockout & hallucinated edits! Run /compact or restart session.]"
+                )
 
         return {
             "content": [

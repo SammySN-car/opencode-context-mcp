@@ -146,3 +146,27 @@ def test_codemode_sandbox_blocks_fs_process_and_fetch():
             assert parsed["ok"] is False
     finally:
         srv.stop()
+
+
+def test_codemode_suppresses_inner_zone_alerts_and_counts_single_turn():
+    srv = CodeModeMCPServer()
+    try:
+        srv.base_server.ledger.session_tokens_sent = 50_000
+        res = srv.execute_ts(
+            """
+            const [a, b] = await Promise.all([
+              occe.fileSlice({ path: "occe/protocol.py", start_line: 1, end_line: 5 }),
+              occe.tokenLedger(),
+            ]);
+            return { aText: a.text, bText: b.text };
+            """
+        )
+        assert res["isError"] is False
+        outer_text = res["content"][0]["text"]
+        json_part = outer_text.split("\n\n[OCCE ALERT:")[0]
+        parsed = json.loads(json_part)
+        assert "[OCCE ALERT:" not in parsed["result"]["aText"]
+        assert "[OCCE ALERT:" not in parsed["result"]["bText"]
+        assert srv.base_server.ledger.turn_count == 1
+    finally:
+        srv.stop()
