@@ -46,15 +46,15 @@ def build_codemode_tool_definitions() -> List[Dict[str, Any]]:
                 "inside the isolate; only your `return` value enters context.\n\n"
                 f"```ts\n{dts}\n```"
             ),
-            "readOnlyHint": False,
-            "destructiveHint": True,
-            "idempotentHint": False,
-            "openWorldHint": True,
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
             "annotations": {
-                "readOnlyHint": False,
-                "destructiveHint": True,
-                "idempotentHint": False,
-                "openWorldHint": True,
+                "readOnlyHint": True,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": False,
             },
             "inputSchema": {
                 "type": "object",
